@@ -1,24 +1,21 @@
 #!/usr/bin/env bash
 #
-# Install the Teams adapter, persist TEAMS_APP_ID / _PASSWORD / _TENANT_ID /
-# _TYPE to .env + data/env/env, and restart the service. Non-interactive —
-# the operator-facing Azure portal walkthroughs live in
-# setup/channels/teams.ts. Credentials come in via env vars:
-#   TEAMS_APP_ID            (required)
-#   TEAMS_APP_PASSWORD      (required — client secret value from Azure)
-#   TEAMS_APP_TYPE          (required — SingleTenant | MultiTenant)
-#   TEAMS_APP_TENANT_ID     (required when type=SingleTenant)
+# Install the Slack adapter, persist SLACK_BOT_TOKEN + SLACK_SIGNING_SECRET to
+# .env + data/env/env, and restart the service. Non-interactive — the
+# operator-facing app creation walkthrough + credential paste live in
+# setup/channels/slack.ts. Credentials come in via env vars:
+# SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET.
 #
-# Emits exactly one status block on stdout (ADD_TEAMS) at the end. All chatty
-# progress messages go to stderr so setup:auto's raw-log capture sees the
-# full story without cluttering the final block for the parser.
+# Emits exactly one status block on stdout (ADD_SLACK) at the end. All chatty
+# progress messages go to stderr so setup:auto's raw-log capture sees the full
+# story without cluttering the final block for the parser.
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# Keep in sync with .claude/skills/add-teams/SKILL.md.
-ADAPTER_VERSION="@chat-adapter/teams@4.26.0"
+# Keep in sync with .claude/skills/add-slack/SKILL.md.
+ADAPTER_VERSION="@chat-adapter/slack@4.26.0"
 
 # Resolve which remote carries the channels branch — handles forks where
 # upstream lives on a different remote than `origin`.
@@ -30,7 +27,7 @@ CHANNELS_BRANCH="${CHANNELS_REMOTE}/channels"
 emit_status() {
   local status=$1 error=${2:-}
   local already=${ADAPTER_ALREADY_INSTALLED:-false}
-  echo "=== NANOCLAW SETUP: ADD_TEAMS ==="
+  echo "=== NANOCLAW SETUP: ADD_SLACK ==="
   echo "STATUS: ${status}"
   echo "ADAPTER_VERSION: ${ADAPTER_VERSION}"
   echo "ADAPTER_ALREADY_INSTALLED: ${already}"
@@ -38,28 +35,20 @@ emit_status() {
   echo "=== END ==="
 }
 
-log() { echo "[add-teams] $*" >&2; }
+log() { echo "[add-slack] $*" >&2; }
 
-if [ -z "${TEAMS_APP_ID:-}" ]; then
-  emit_status failed "TEAMS_APP_ID env var not set"
+if [ -z "${SLACK_BOT_TOKEN:-}" ]; then
+  emit_status failed "SLACK_BOT_TOKEN env var not set"
   exit 1
 fi
-if [ -z "${TEAMS_APP_PASSWORD:-}" ]; then
-  emit_status failed "TEAMS_APP_PASSWORD env var not set"
-  exit 1
-fi
-if [ -z "${TEAMS_APP_TYPE:-}" ]; then
-  emit_status failed "TEAMS_APP_TYPE env var not set (SingleTenant|MultiTenant)"
-  exit 1
-fi
-if [ "${TEAMS_APP_TYPE}" = "SingleTenant" ] && [ -z "${TEAMS_APP_TENANT_ID:-}" ]; then
-  emit_status failed "TEAMS_APP_TENANT_ID required when TEAMS_APP_TYPE=SingleTenant"
+if [ -z "${SLACK_SIGNING_SECRET:-}" ]; then
+  emit_status failed "SLACK_SIGNING_SECRET env var not set"
   exit 1
 fi
 
 need_install() {
-  [ ! -f src/channels/teams.ts ] && return 0
-  ! grep -q "^import './teams.js';" src/channels/index.ts 2>/dev/null && return 0
+  [ ! -f src/channels/slack.ts ] && return 0
+  ! grep -q "^import './slack.js';" src/channels/index.ts 2>/dev/null && return 0
   return 1
 }
 
@@ -73,11 +62,11 @@ if need_install; then
   }
 
   log "Copying adapter from ${CHANNELS_BRANCH}…"
-  git show "${CHANNELS_BRANCH}:src/channels/teams.ts" > src/channels/teams.ts
+  git show "${CHANNELS_BRANCH}:src/channels/slack.ts" > src/channels/slack.ts
 
   # Append self-registration import if missing.
-  if ! grep -q "^import './teams.js';" src/channels/index.ts; then
-    echo "import './teams.js';" >> src/channels/index.ts
+  if ! grep -q "^import './slack.js';" src/channels/index.ts; then
+    echo "import './slack.js';" >> src/channels/index.ts
   fi
 
   log "Installing ${ADAPTER_VERSION}…"
@@ -95,7 +84,8 @@ else
   log "Adapter files already installed — skipping install phase."
 fi
 
-# Persist credentials.
+# Persist credentials. auto.ts validates via auth.test before this point, so
+# bad values here would be an internal bug rather than operator input.
 touch .env
 upsert_env() {
   local key=$1 value=$2
@@ -107,12 +97,8 @@ upsert_env() {
     echo "${key}=${value}" >> .env
   fi
 }
-upsert_env TEAMS_APP_ID "$TEAMS_APP_ID"
-upsert_env TEAMS_APP_PASSWORD "$TEAMS_APP_PASSWORD"
-upsert_env TEAMS_APP_TYPE "$TEAMS_APP_TYPE"
-if [ -n "${TEAMS_APP_TENANT_ID:-}" ]; then
-  upsert_env TEAMS_APP_TENANT_ID "$TEAMS_APP_TENANT_ID"
-fi
+upsert_env SLACK_BOT_TOKEN "$SLACK_BOT_TOKEN"
+upsert_env SLACK_SIGNING_SECRET "$SLACK_SIGNING_SECRET"
 
 # Container reads from data/env/env (the host mounts it).
 mkdir -p data/env
@@ -132,8 +118,8 @@ case "$(uname -s)" in
     ;;
 esac
 
-# Give the Teams adapter a moment to register its webhook before the driver
-# continues.
-sleep 5
+# Give the Slack adapter a moment to finish starting the webhook listener
+# before emitting success.
+sleep 3
 
 emit_status success
