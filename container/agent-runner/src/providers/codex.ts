@@ -14,6 +14,7 @@
  * turns, so no message is dropped).
  */
 import fs from 'fs';
+import path from 'path';
 
 import { registerProvider } from './provider-registry.js';
 import type { AgentProvider, AgentQuery, ProviderEvent, ProviderOptions, QueryInput } from './types.js';
@@ -36,25 +37,57 @@ const TURN_TIMEOUT_MS = 5 * 60 * 1000;
 
 // ── System-prompt assembly ──────────────────────────────────────────────────
 // Codex's app-server doesn't expand Claude Code's `@-import` syntax in
-// CLAUDE.md, so we load group + global explicitly and pass the combined text
-// as `baseInstructions`. Mirrors the OpenCode provider's readClaudeMdForPrompt
-// so non-Claude providers behave the same way. The literal `@./.claude-global.md`
-// line in group CLAUDE.md is left in place — it's harmless context for the
-// model and strips on an agent-side convention upstream may change.
+// CLAUDE.md, and doesn't auto-load CLAUDE.local.md from the working dir the
+// way Claude Code does. Left alone, the agent sees only the raw import
+// directives as literal text and none of the composed content — no shared
+// CLAUDE.md, no module fragments, no per-group memory. We resolve both here
+// so Codex (and any other non-Claude provider) gets the same effective
+// system prompt the Claude provider gets natively.
+
+/**
+ * Inline `@<path>` import directives (line-anchored) with the contents of
+ * the referenced file, resolved relative to `baseDir`. Recurses so imports
+ * within imported files expand too. Cycles and missing files are silently
+ * dropped (replaced with empty text) rather than left as raw `@path` lines,
+ * which would confuse the model.
+ */
+export function resolveClaudeImports(content: string, baseDir: string, seen: Set<string> = new Set()): string {
+  return content.replace(/^@(\S+)\s*$/gm, (_match, importPath: string) => {
+    try {
+      const resolved = path.resolve(baseDir, importPath);
+      if (seen.has(resolved)) return '';
+      if (!fs.existsSync(resolved)) return '';
+      const nextSeen = new Set(seen);
+      nextSeen.add(resolved);
+      const imported = fs.readFileSync(resolved, 'utf-8');
+      return resolveClaudeImports(imported, path.dirname(resolved), nextSeen);
+    } catch {
+      return '';
+    }
+  });
+}
 
 function readAgentAndGlobalClaudeMd(): string | undefined {
-  const groupPath = '/workspace/agent/CLAUDE.md';
-  const globalPath = '/workspace/global/CLAUDE.md';
-  let content = '';
+  // Per-group CLAUDE.md is responsible for pulling in the global instructions
+  // if the group wants them (the default scaffold starts with
+  // `@./.claude-global.md` which resolveClaudeImports inlines). Appending
+  // `/workspace/global/CLAUDE.md` explicitly here would double-inline the
+  // global content for any non-main group, wasting context tokens and
+  // risking contradictory instructions. Groups that don't import global
+  // intentionally don't get it — same as Claude-backed agents.
+  const groupDir = '/workspace/agent';
+  const groupPath = `${groupDir}/CLAUDE.md`;
+  const localPath = `${groupDir}/CLAUDE.local.md`;
+  const parts: string[] = [];
+
   if (fs.existsSync(groupPath)) {
-    content += fs.readFileSync(groupPath, 'utf-8');
+    parts.push(resolveClaudeImports(fs.readFileSync(groupPath, 'utf-8'), groupDir));
   }
-  const isMain = process.env.NANOCLAW_IS_MAIN === '1';
-  if (!isMain && fs.existsSync(globalPath)) {
-    if (content) content += '\n\n---\n\n';
-    content += fs.readFileSync(globalPath, 'utf-8');
+  if (fs.existsSync(localPath)) {
+    parts.push(resolveClaudeImports(fs.readFileSync(localPath, 'utf-8'), groupDir));
   }
-  return content || undefined;
+
+  return parts.length > 0 ? parts.join('\n\n---\n\n') : undefined;
 }
 
 function composeBaseInstructions(promptAddendum: string | undefined): string | undefined {
