@@ -82,7 +82,8 @@ export const CONFIG: Entry[] = [
     group: 'OneCLI',
     type: 'string',
     secret: true,
-    placeholder: 'oat_…',
+    placeholder: 'oc_…',
+    validate: (v) => (v.startsWith('oc_') ? undefined : 'Must start with oc_'),
   },
   {
     key: 'anthropicBaseUrl',
