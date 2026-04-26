@@ -22,8 +22,6 @@ groups/*
 
 # Secrets
 *.keys.json
-.env
-.env*
 
 # Temp files
 .tmp-*
@@ -39,3 +37,4 @@ groups/*
 .nanoclaw/
 
 agents-sdk-docs
+config.bat

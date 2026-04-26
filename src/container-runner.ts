@@ -36,7 +36,13 @@ import {
   type ProviderContainerContribution,
   type VolumeMount,
 } from './providers/provider-container-registry.js';
-import { markContainerRunning, markContainerStopped, sessionDir, writeSessionRouting } from './session-manager.js';
+import {
+  heartbeatPath,
+  markContainerRunning,
+  markContainerStopped,
+  sessionDir,
+  writeSessionRouting,
+} from './session-manager.js';
 import type { AgentGroup, Session } from './types.js';
 
 const onecli = new OneCLI({ url: ONECLI_URL, apiKey: ONECLI_API_KEY });
@@ -131,6 +137,12 @@ async function spawnContainer(session: Session): Promise<void> {
 
   log.info('Spawning container', { sessionId: session.id, agentGroup: agentGroup.name, containerName });
 
+  // Clear any orphan heartbeat from a previous container instance — the
+  // sweep's ceiling check treats a missing file as "fresh spawn, give grace"
+  // (host-sweep.ts line 87). Without this, the stale mtime can trigger an
+  // immediate kill before the new container touches the file itself.
+  fs.rmSync(heartbeatPath(agentGroup.id, session.id), { force: true });
+
   const container = spawn(CONTAINER_RUNTIME_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
   activeContainers.set(session.id, { process: container, containerName });
@@ -179,12 +191,31 @@ export function killContainer(sessionId: string, reason: string): void {
   }
 }
 
+/**
+ * Resolve the provider name for a session using the precedence documented in
+ * the provider-install skills:
+ *
+ *   sessions.agent_provider
+ *     → agent_groups.agent_provider
+ *     → container.json `provider`
+ *     → 'claude'
+ *
+ * Pure so the precedence can be unit-tested without a DB or filesystem.
+ */
+export function resolveProviderName(
+  sessionProvider: string | null | undefined,
+  agentGroupProvider: string | null | undefined,
+  containerConfigProvider: string | null | undefined,
+): string {
+  return (sessionProvider || agentGroupProvider || containerConfigProvider || 'claude').toLowerCase();
+}
+
 function resolveProviderContribution(
   session: Session,
   agentGroup: AgentGroup,
   containerConfig: import('./container-config.js').ContainerConfig,
 ): { provider: string; contribution: ProviderContainerContribution } {
-  const provider = (containerConfig.provider || 'claude').toLowerCase();
+  const provider = resolveProviderName(session.agent_provider, agentGroup.agent_provider, containerConfig.provider);
   const fn = getProviderContainerConfig(provider);
   const contribution = fn
     ? fn({
