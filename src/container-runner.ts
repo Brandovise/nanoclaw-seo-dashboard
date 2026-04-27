@@ -298,6 +298,13 @@ function buildMounts(
   // skill symlinks)
   mounts.push({ hostPath: claudeDir, containerPath: '/home/node/.claude', readonly: false });
 
+  // Persist Claude Code's top-level config file across container restarts.
+  // Claude writes /home/node/.claude.json on first run; without this mount it
+  // vanishes when the container exits and session resume fails on the next spawn.
+  const claudeJsonHost = path.join(claudeDir, 'claude.json');
+  if (!fs.existsSync(claudeJsonHost)) fs.writeFileSync(claudeJsonHost, '{}');
+  mounts.push({ hostPath: claudeJsonHost, containerPath: '/home/node/.claude.json', readonly: false });
+
   // Shared agent-runner source — read-only, same code for all groups.
   const agentRunnerSrc = path.join(projectRoot, 'container', 'agent-runner', 'src');
   mounts.push({ hostPath: agentRunnerSrc, containerPath: '/app/src', readonly: true });

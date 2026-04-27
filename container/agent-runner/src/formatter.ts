@@ -90,15 +90,19 @@ export interface RoutingContext {
 
 /**
  * Extract routing context from a batch of messages.
- * Uses the first message's routing fields.
+ *
+ * When messages pile up across restarts, a batch may contain messages from
+ * different threads. Replies must go to the most recent triggering message's
+ * thread — using the oldest (first) would send replies to stale threads.
  */
 export function extractRouting(messages: MessageInRow[]): RoutingContext {
-  const first = messages[0];
+  const triggers = messages.filter((m) => m.trigger === 1);
+  const last = triggers[triggers.length - 1] ?? messages[messages.length - 1];
   return {
-    platformId: first?.platform_id ?? null,
-    channelType: first?.channel_type ?? null,
-    threadId: first?.thread_id ?? null,
-    inReplyTo: first?.id ?? null,
+    platformId: last?.platform_id ?? null,
+    channelType: last?.channel_type ?? null,
+    threadId: last?.thread_id ?? null,
+    inReplyTo: last?.id ?? null,
   };
 }
 

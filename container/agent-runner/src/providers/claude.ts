@@ -233,8 +233,14 @@ const CLAUDE_CODE_AUTO_COMPACT_WINDOW = '165000';
  * Stale-session detection. Matches Claude Code's error text when a
  * resumed session can't be found — missing transcript .jsonl, unknown
  * session ID, etc.
+ *
+ * "process exited with code 1" is included because the Claude Code SDK spawns
+ * the subprocess with stderr='ignore'. When Claude Code can't find the session
+ * file it prints "No conversation found" to stderr (discarded) and exits 1 —
+ * so the JS-level error only says "exited with code 1". The check is gated on
+ * `continuation` being set, so it only fires when we were actually trying to resume.
  */
-const STALE_SESSION_RE = /no conversation found|ENOENT.*\.jsonl|session.*not found/i;
+const STALE_SESSION_RE = /no conversation found|ENOENT.*\.jsonl|session.*not found|process exited with code 1/i;
 
 export class ClaudeProvider implements AgentProvider {
   readonly supportsNativeSlashCommands = true;
