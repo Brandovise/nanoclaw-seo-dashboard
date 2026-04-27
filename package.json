@@ -21,7 +21,10 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "dashboard:api": "pnpm --filter @nanoclaw-seo-dashboard/api run dev",
+    "dashboard:web": "pnpm --filter @nanoclaw-seo-dashboard/web run dev",
+    "dashboard:build": "pnpm --filter @nanoclaw-seo-dashboard/api run build && pnpm --filter @nanoclaw-seo-dashboard/web run build"
   },
   "dependencies": {
     "@chat-adapter/slack": "4.26.0",

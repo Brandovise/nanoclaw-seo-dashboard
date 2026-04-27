@@ -25,6 +25,9 @@ groups/*
 .env
 .env*
 
+# Dashboard local data (SQLite, wp-sync, git workdirs)
+dashboard/data/
+
 # Temp files
 .tmp-*
 
