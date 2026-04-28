@@ -1,0 +1,3749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NanoClaw Blog Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="shared.css">
+<script src="https://unpkg.com/force-graph@1.47.3/dist/force-graph.min.js"></script>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+<!-- Mobile hamburger -->
+<button class="hamburger" id="hamburger" onclick="toggleSidebar()">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- Sidebar -->
+<aside class="w-56 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col overflow-y-auto" id="sidebar">
+  <div class="p-4 border-b border-slate-800">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">N</div>
+      <div>
+        <div class="font-semibold text-slate-200 text-sm">NanoClaw</div>
+        <div class="flex items-center gap-1 mt-0.5">
+          <span class="dot dot-green" id="conn-dot"></span>
+          <span class="text-xs text-slate-500" id="conn-status">connecting…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav class="p-2 flex-1">
+    <a href="/" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+      ← NanoClaw
+    </a>
+    <div class="mt-2 pt-2 border-t border-slate-800">
+      <div class="text-xs text-slate-600 px-3 py-1 uppercase tracking-wider font-semibold">Blog</div>
+    </div>
+    <div class="sidebar-link active" onclick="navigate('blog')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Blog Overview
+    </div>
+    <div class="sidebar-link" onclick="navigate('blog-audit')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      SEO Audit
+    </div>
+    <div class="sidebar-link" onclick="navigate('blog-queue')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      Rewrite Queue
+    </div>
+    <div class="sidebar-link" onclick="navigate('blog-perf')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      Performance
+    </div>
+    <div class="sidebar-link" onclick="navigate('blog-agents')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"/><path d="M3 21a9 9 0 0 1 18 0"/></svg>
+      Blog Agents
+    </div>
+    <div class="sidebar-link" onclick="navigate('blog-links')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="8.5" y1="7.5" x2="15.5" y2="16.5"/><line x1="15.5" y1="7.5" x2="8.5" y2="16.5"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="18" y1="9" x2="18" y2="15"/></svg>
+      Link Graph
+    </div>
+    <div class="sidebar-link" onclick="navigate('blog-wp-sync')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16"/><path d="M9 20V9"/><path d="M14 4v5"/></svg>
+      WordPress Sync
+    </div>
+    <div class="sidebar-link" onclick="navigate('blog-affiliates')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      Affiliates
+    </div>
+    <div class="sidebar-link" onclick="navigate('blog-interlinking')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      Interlinking
+    </div>
+    <div class="sidebar-link" onclick="navigate('blog-cannibalism')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="15" x2="16" y2="15"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+      Cannibalism
+    </div>
+    <div class="sidebar-link" onclick="navigate('blog-ai-usage')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 8h.01M12 8h.01M17 8h.01M7 12h10"/></svg>
+      AI Usage
+    </div>
+  </nav>
+  <div class="p-3 border-t border-slate-800">
+    <div class="text-xs text-slate-600">Auto-refresh: <span id="refresh-status">on</span></div>
+  </div>
+</aside>
+
+<!-- Main Content -->
+<main class="flex-1 overflow-y-auto">
+
+<!-- Blog Overview Section -->
+  <div id="section-blog" class="section active p-6">
+    <div class="flex items-center justify-between mb-2">
+      <h1 class="text-xl font-bold text-slate-100">Blog Dashboard — https://unabhaengiger-finanzberater.de/</h1>
+      <span class="text-xs text-slate-500" id="blog-date-range"></span>
+    </div>
+    <p class="text-sm text-slate-500 mb-6">AI-powered article rewriting pipeline. Tracking progress, quality scores, and search performance since launch.</p>
+
+    <!-- Row 1: Key headline numbers -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div class="card text-center">
+        <div class="stat-value text-indigo-400" id="blog-rewrite-progress">—</div>
+        <div class="stat-label">Articles Updated</div>
+      </div>
+      <div class="card text-center">
+        <div class="stat-value text-yellow-400" id="blog-pending-count">—</div>
+        <div class="stat-label">Remaining</div>
+      </div>
+      <div class="card text-center">
+        <div class="stat-value text-emerald-400" id="blog-avg-seo">—</div>
+        <div class="stat-label">Avg SEO Score</div>
+        <div class="text-xs text-slate-500 mt-1" id="blog-seo-scored-note"></div>
+      </div>
+      <div class="card text-center">
+        <div class="stat-value text-purple-400" id="blog-avg-geo">—</div>
+        <div class="stat-label">Avg GEO Score</div>
+        <div class="text-xs text-slate-500 mt-1" id="blog-geo-scored-note"></div>
+      </div>
+    </div>
+
+    <!-- Row 1b: Search performance KPIs -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="card text-center" id="kpi-clicks">
+        <div class="stat-value text-2xl text-slate-500">—</div>
+        <div class="stat-label">Clicks</div>
+      </div>
+      <div class="card text-center" id="kpi-impressions">
+        <div class="stat-value text-2xl text-slate-500">—</div>
+        <div class="stat-label">Impressions</div>
+      </div>
+      <div class="card text-center" id="kpi-position">
+        <div class="stat-value text-2xl text-slate-500">—</div>
+        <div class="stat-label">Avg Position</div>
+      </div>
+      <div class="card text-center" id="kpi-failed">
+        <div class="stat-value text-2xl text-red-400" id="blog-failed-count">—</div>
+        <div class="stat-label">Failed Rewrites</div>
+      </div>
+    </div>
+
+    <!-- Row 2: Progress bar + Performance comparison -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <!-- Rewrite Progress -->
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Rewrite Progress</h2>
+        <div id="blog-queue-summary">Loading…</div>
+      </div>
+
+      <!-- Before / After Performance -->
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Search Performance — Before vs After Rewrites</h2>
+        <div id="blog-perf-comparison">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Row 3: Score distributions + Top issues -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <!-- SEO Score Distribution -->
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">SEO Score Distribution</h2>
+        <div id="blog-seo-dist">Loading…</div>
+      </div>
+
+      <!-- GEO Score Distribution -->
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">GEO Score Distribution</h2>
+        <div id="blog-geo-dist">Loading…</div>
+      </div>
+
+      <!-- Top SEO Issues -->
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Top Audit Issues</h2>
+        <div id="blog-top-issues">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Row 4: Activity + Scheduler -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- Activity Timeline -->
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Last Activity</h2>
+        <div id="blog-activity">Loading…</div>
+      </div>
+
+      <!-- Scheduler -->
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Scheduler Log (last 20 lines)</h2>
+        <div id="blog-scheduler-log" style="max-height:200px;overflow-y:auto;background:#0a0f1a;padding:12px;border-radius:8px">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Insights Section -->
+    <div id="blog-insights" class="mt-6" style="display:none">
+      <h2 class="text-lg font-bold text-slate-100 mb-4">Insights</h2>
+
+      <!-- ROI + Days to Impact summary cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+        <div class="card py-3">
+          <div class="stat-value text-2xl" id="insight-roi-avg">--</div>
+          <div class="stat-label">Avg clicks gained / rewrite</div>
+        </div>
+        <div class="card py-3">
+          <div class="stat-value text-2xl text-blue-400" id="insight-roi-total">--</div>
+          <div class="stat-label">Total clicks gained</div>
+        </div>
+        <div class="card py-3">
+          <div class="flex gap-2">
+            <span class="stat-value text-xl text-green-400" id="insight-roi-pos">--</span>
+            <span class="text-slate-600">/</span>
+            <span class="stat-value text-xl text-red-400" id="insight-roi-neg">--</span>
+          </div>
+          <div class="stat-label">Rewrites up / down</div>
+        </div>
+        <div class="card py-3">
+          <div class="stat-value text-2xl text-amber-400" id="insight-days-avg">--</div>
+          <div class="stat-label">Avg days to impact</div>
+        </div>
+        <div class="card py-3">
+          <div class="stat-value text-2xl text-amber-400" id="insight-days-median">--</div>
+          <div class="stat-label">Median days to impact</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Quick Wins -->
+        <div class="card">
+          <h2 class="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-3">Quick Wins — High impressions, low CTR</h2>
+          <p class="text-xs text-slate-500 mb-3">These articles get seen but not clicked. Improving titles & meta descriptions could boost traffic fast.</p>
+          <div id="insight-quick-wins" class="space-y-1 text-xs">Loading…</div>
+        </div>
+
+        <!-- Content Decay -->
+        <div class="card">
+          <h2 class="text-xs font-semibold text-red-400 uppercase tracking-wider mb-3">Content Decay — Losing traffic</h2>
+          <p class="text-xs text-slate-500 mb-3">Non-rewritten articles losing clicks. Candidates for the next rewrite batch.</p>
+          <div id="insight-decay" class="space-y-1 text-xs">Loading…</div>
+        </div>
+
+        <!-- Keyword Cannibalization -->
+        <div class="card">
+          <h2 class="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-3">Keyword Cannibalization</h2>
+          <p class="text-xs text-slate-500 mb-3">Multiple articles competing for the same keyword. Consider merging or differentiating.</p>
+          <div id="insight-cannib" class="space-y-1 text-xs" style="max-height:250px;overflow-y:auto">Loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blog SEO Audit Section -->
+  <div id="section-blog-audit" class="section p-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <h1 class="text-xl font-bold text-slate-100">SEO Audit Results</h1>
+      <div class="flex gap-2">
+        <select id="audit-sort" onchange="loadAudit()">
+          <option value="seo_score">Sort: SEO score ↑</option>
+          <option value="geo_score">Sort: GEO score ↑</option>
+          <option value="seo_score_desc">Sort: SEO score ↓</option>
+          <option value="geo_score_desc">Sort: GEO score ↓</option>
+          <option value="failCount">Sort: Most failures</option>
+        </select>
+      </div>
+    </div>
+    <p class="text-sm text-slate-500 mb-3">Claude scores each article (22 checks + SEO/GEO) and results are stored in the <strong class="text-slate-400">dashboard SQLite</strong> (<code class="text-slate-500 bg-slate-900 px-1 rounded text-xs">seo_audits</code> table, same file as WordPress sync). Batches process posts that do not have an audit yet (newest in WordPress first), or that were changed in WordPress after their last audit. Click a row to expand failed criteria, model summary, and how to improve scores. Run WordPress Sync first. Uses <code class="text-slate-400 bg-slate-900 px-1 rounded text-xs">ANTHROPIC_API_KEY</code>; runs need the dashboard write token.</p>
+    <div class="card p-3 mb-4 flex flex-wrap items-center gap-3">
+      <label class="text-xs text-slate-400">Articles to audit (newest first)</label>
+      <input type="number" id="audit-run-limit" class="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-200" value="10" min="1" max="50" title="Max 50 per batch">
+      <button type="button" class="btn btn-primary btn-sm" id="audit-run-btn" onclick="runSeoAudit()">Run AI audit</button>
+      <span class="text-xs text-slate-500 flex-1 min-w-[12rem]" id="audit-run-status"></span>
+    </div>
+    <div class="card p-0 overflow-hidden">
+      <table>
+        <thead><tr>
+          <th>Article slug</th>
+          <th style="width:90px">SEO</th>
+
+          <th style="width:90px">GEO</th>
+          <th style="width:60px">Fails</th>
+          <th style="width:130px">Audited</th>
+        </tr></thead>
+        <tbody id="audit-tbody"><tr><td colspan="5" class="text-center text-slate-500 py-8">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="flex justify-between mt-4">
+      <span class="text-sm text-slate-500" id="audit-count"></span>
+      <div class="flex gap-2">
+        <button class="btn btn-primary btn-sm" onclick="auditPrev()" id="audit-prev-btn" disabled>← Prev</button>
+        <button class="btn btn-primary btn-sm" onclick="auditNext()" id="audit-next-btn" disabled>Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blog Rewrite Queue Section -->
+  <div id="section-blog-queue" class="section p-6">
+    <h1 class="text-xl font-bold text-slate-100 mb-6">Rewrite Queue</h1>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div class="card lg:col-span-2">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Pending (<span id="rq-pending-count">…</span>)</h2>
+        <div id="rq-pending" style="max-height:350px;overflow-y:auto">Loading…</div>
+      </div>
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider text-red-400">Failed (<span id="rq-failed-count">0</span>)</h2>
+        <div id="rq-failed" style="max-height:350px;overflow-y:auto">Loading…</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider text-green-400">Completed (<span id="rq-done-count">…</span>)</h2>
+      <div id="rq-done" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2" style="max-height:300px;overflow-y:auto">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Blog Performance Section -->
+  <div id="section-blog-perf" class="section p-6">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-xl font-bold text-slate-100">Article Performance</h1>
+      <div class="flex gap-2">
+        <select id="perf-period" onchange="loadPerformance()">
+          <option value="all">All time</option>
+          <option value="month">Last 30 days</option>
+          <option value="week">Last 7 days</option>
+          <option value="day">Last 24 hours</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="loadPerformance()">Refresh</button>
+      </div>
+    </div>
+
+    <!-- Data status bar -->
+    <div class="card mb-4 flex items-center gap-4 py-3" id="perf-data-status">
+      <span class="text-xs text-slate-500">Loading data status...</span>
+    </div>
+
+    <!-- Summary row 1: Trend + Position overview -->
+    <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
+      <div class="card py-3">
+        <div class="stat-value text-green-400 text-2xl" id="perf-improved">--</div>
+        <div class="stat-label">Improved</div>
+      </div>
+      <div class="card py-3">
+        <div class="stat-value text-red-400 text-2xl" id="perf-declining">--</div>
+        <div class="stat-label">Declining</div>
+      </div>
+      <div class="card py-3">
+        <div class="stat-value text-slate-400 text-2xl" id="perf-flat">--</div>
+        <div class="stat-label">Flat</div>
+      </div>
+      <div class="card py-3">
+        <div class="stat-value text-indigo-400 text-2xl" id="perf-avg-delta">--</div>
+        <div class="stat-label">Avg click delta</div>
+      </div>
+      <div class="card py-3">
+        <div class="stat-value text-2xl" id="perf-avg-pos-delta">--</div>
+        <div class="stat-label">Avg position change</div>
+      </div>
+      <div class="card py-3">
+        <div class="flex items-center gap-1" id="perf-pos-arrows">
+          <span class="stat-value text-green-400 text-2xl" id="perf-pos-up">--</span>
+          <span class="text-slate-600 text-sm">/</span>
+          <span class="stat-value text-red-400 text-2xl" id="perf-pos-down">--</span>
+        </div>
+        <div class="stat-label">Pos improved / dropped</div>
+      </div>
+    </div>
+
+    <!-- Position bracket bar -->
+    <div class="card mb-4 py-3" id="perf-brackets-card">
+      <div class="flex items-center gap-4 mb-2">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Position distribution (rewritten articles)</span>
+      </div>
+      <div class="flex gap-1 h-6 rounded overflow-hidden" id="perf-bracket-bar">
+        <div class="bg-green-500" style="width:0%" title="Position 1-3"></div>
+        <div class="bg-blue-500" style="width:0%" title="Position 4-10"></div>
+        <div class="bg-yellow-500" style="width:0%" title="Position 11-20"></div>
+        <div class="bg-red-500" style="width:0%" title="Position 20+"></div>
+      </div>
+      <div class="flex gap-4 mt-2 text-xs" id="perf-bracket-labels">
+        <span class="text-green-400">1-3: <b>0</b></span>
+        <span class="text-blue-400">4-10: <b>0</b></span>
+        <span class="text-yellow-400">11-20: <b>0</b></span>
+        <span class="text-red-400">20+: <b>0</b></span>
+      </div>
+    </div>
+
+    <!-- Daily traffic chart -->
+    <div class="card mb-4 py-3" id="daily-chart-card">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Daily Traffic (last 90 days)</span>
+        <div class="flex gap-4 text-xs text-slate-500">
+          <span><span style="color:#818cf8">&#9632;</span> Clicks</span>
+          <span><span style="color:#34d399">&#9632;</span> Impressions (scaled)</span>
+          <span><span style="color:#f59e0b">&#9650;</span> Rewrite days</span>
+        </div>
+      </div>
+      <div style="height:200px;position:relative">
+        <svg id="daily-traffic-chart" width="100%" height="100%" viewBox="0 0 800 180" preserveAspectRatio="none"></svg>
+      </div>
+    </div>
+
+    <!-- KPI Dashboard -->
+    <div id="kpi-section" class="mb-4" style="display:none">
+      <!-- Site-wide vs Rewritten traffic comparison -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+        <div class="card py-3">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Site-wide Traffic (28d vs prior 28d)</div>
+          <div class="flex gap-6">
+            <div>
+              <div class="text-lg font-bold text-slate-200" id="kpi-site-clicks">--</div>
+              <div class="text-xs text-slate-500">Clicks <span id="kpi-site-clicks-delta" class="ml-1"></span></div>
+            </div>
+            <div>
+              <div class="text-lg font-bold text-slate-200" id="kpi-site-impressions">--</div>
+              <div class="text-xs text-slate-500">Impressions <span id="kpi-site-imp-delta" class="ml-1"></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="card py-3">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Rewritten Articles Traffic (28d vs prior 28d)</div>
+          <div class="flex gap-6">
+            <div>
+              <div class="text-lg font-bold text-slate-200" id="kpi-rw-clicks">--</div>
+              <div class="text-xs text-slate-500">Clicks <span id="kpi-rw-clicks-delta" class="ml-1"></span></div>
+            </div>
+            <div>
+              <div class="text-lg font-bold text-slate-200" id="kpi-rw-impressions">--</div>
+              <div class="text-xs text-slate-500">Impressions <span id="kpi-rw-imp-delta" class="ml-1"></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top gainers/losers + CTR + new keywords -->
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-3 mb-3">
+        <div class="card py-3">
+          <div class="text-xs font-semibold text-green-400 uppercase tracking-wider mb-2">Top Gainers (clicks)</div>
+          <div id="kpi-gainers" class="space-y-1 text-xs"></div>
+        </div>
+        <div class="card py-3">
+          <div class="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">Top Losers (clicks)</div>
+          <div id="kpi-losers" class="space-y-1 text-xs"></div>
+        </div>
+        <div class="card py-3">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">CTR Distribution</div>
+          <div id="kpi-ctr-dist" class="space-y-1 text-xs"></div>
+        </div>
+        <div class="card py-3">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Keyword & Position Gains</div>
+          <div class="space-y-2">
+            <div>
+              <div class="text-lg font-bold text-blue-400" id="kpi-new-kw">--</div>
+              <div class="text-xs text-slate-500">New keywords after rewrites</div>
+            </div>
+            <div>
+              <div class="text-lg font-bold text-green-400" id="kpi-top10-count">--</div>
+              <div class="text-xs text-slate-500">Articles entered top 10</div>
+            </div>
+            <div id="kpi-top10-list" class="text-xs text-slate-500 mt-1"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Weekly trend chart + table -->
+      <div class="card py-3 mb-3">
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Weekly Traffic Trend</div>
+        <!-- Chart -->
+        <div id="weekly-chart-container" class="mb-4" style="height:180px;position:relative">
+          <svg id="weekly-chart" width="100%" height="100%" viewBox="0 0 600 160" preserveAspectRatio="none"></svg>
+        </div>
+        <!-- Legend -->
+        <div class="flex gap-4 mb-3 text-xs text-slate-500">
+          <span><span style="color:#818cf8">&#9632;</span> Clicks</span>
+          <span><span style="color:#34d399">&#9632;</span> Impressions (scaled)</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="text-xs">
+            <thead><tr>
+              <th>Week</th><th>Clicks</th><th>Impressions</th><th>Trend</th>
+            </tr></thead>
+            <tbody id="kpi-weekly-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card p-0 overflow-hidden">
+      <table>
+        <thead><tr>
+          <th>Article slug</th>
+          <th style="width:100px">Rewrite date</th>
+          <th style="width:140px">Position (before → after)</th>
+          <th style="width:120px">Clicks (before/after)</th>
+          <th style="width:140px">Impressions (before/after)</th>
+          <th style="width:50px">Trend</th>
+        </tr></thead>
+        <tbody id="perf-tbody"><tr><td colspan="6" class="text-center text-slate-500 py-8">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="flex justify-between mt-4">
+      <span class="text-sm text-slate-500" id="perf-count"></span>
+      <div class="flex gap-2">
+        <button class="btn btn-primary btn-sm" onclick="perfPrev()" id="perf-prev-btn" disabled>← Prev</button>
+        <button class="btn btn-primary btn-sm" onclick="perfNext()" id="perf-next-btn" disabled>Next →</button>
+      </div>
+    </div>
+
+    <!-- Keyword drill-down panel (shown when clicking an article) -->
+    <div id="kw-panel" class="card mt-4" style="display:none">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-200" id="kw-title">Keywords</h2>
+          <div class="text-xs text-slate-500 mt-1" id="kw-subtitle"></div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex gap-2 text-xs" id="kw-summary"></div>
+          <button class="btn btn-sm" style="background:#334155;color:#94a3b8;" onclick="document.getElementById('kw-panel').style.display='none'">Close</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto" style="max-height:400px;overflow-y:auto">
+        <table>
+          <thead><tr>
+            <th>Query</th>
+            <th style="width:90px">Impressions</th>
+            <th style="width:70px">Clicks</th>
+            <th style="width:70px">CTR</th>
+            <th style="width:70px">Position</th>
+            <th style="width:90px">Imp delta</th>
+            <th style="width:80px">Pos delta</th>
+            <th style="width:50px">Trend</th>
+          </tr></thead>
+          <tbody id="kw-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blog Agents Section -->
+  <div id="section-blog-agents" class="section p-6">
+    <h1 class="text-xl font-bold text-slate-100 mb-2">Blog Agents</h1>
+    <p class="text-sm text-slate-500 mb-6">Python automation scripts that make up the blog pipeline</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="blog-agents-grid">
+      Loading…
+    </div>
+
+    <div class="card mt-6">
+      <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Pipeline Architecture</h2>
+      <div class="flex flex-wrap gap-2 items-center text-sm text-slate-400">
+        <span class="badge badge-blue">orchestrator</span>
+        <span>→</span>
+        <span class="badge badge-blue">researcher</span>
+        <span class="badge badge-blue">writer (Claude Opus)</span>
+        <span class="badge badge-blue">image_creator (DALL-E 3)</span>
+        <span>→</span>
+        <span class="badge badge-green">seo_auditor (Claude)</span>
+        <span>→</span>
+        <span class="badge badge-green">publisher (GitHub)</span>
+        <span>→</span>
+        <span class="badge badge-yellow">notifier (Slack)</span>
+      </div>
+      <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+        <div class="bg-slate-900 rounded p-3">
+          <div class="font-semibold text-slate-300 mb-1">🤖 AI Models</div>
+          <div class="text-slate-500">Claude Opus 4.6<br>DALL-E 3<br>DuckDuckGo search</div>
+        </div>
+        <div class="bg-slate-900 rounded p-3">
+          <div class="font-semibold text-slate-300 mb-1">🔗 Integrations</div>
+          <div class="text-slate-500">GitHub API<br>Google Search Console<br>Short.io · Slack</div>
+        </div>
+        <div class="bg-slate-900 rounded p-3">
+          <div class="font-semibold text-slate-300 mb-1">📋 Audit Checks</div>
+          <div class="text-slate-500">22 checks per article<br>SEO + GEO + E-E-A-T<br>Target score: 70/100</div>
+        </div>
+        <div class="bg-slate-900 rounded p-3">
+          <div class="font-semibold text-slate-300 mb-1">⏱ Schedule</div>
+          <div class="text-slate-500">Every 6h via cron<br>199 articles queued<br>5 priority phases</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Link Graph Section -->
+  <div id="section-blog-links" class="section p-6">
+    <div class="flex flex-wrap items-center gap-3 mb-1">
+      <h1 class="text-xl font-bold text-slate-100">Link Graph</h1>
+      <button class="btn btn-sm btn-primary" onclick="loadLinkGraph()">Refresh</button>
+      <button class="btn btn-sm" id="lg-rebuild-btn" style="background:#334155;color:#cbd5e1;" onclick="rebuildGraphFromLinkPage()">Rebuild Graph</button>
+      <span class="badge badge-green" id="lg-live-badge" style="display:none">Updated live</span>
+      <span class="text-xs text-slate-500" id="lg-rebuild-status"></span>
+    </div>
+    <p class="text-sm text-slate-500">Internal linking mesh for https://unabhaengiger-finanzberater.de/</p>
+    <p class="text-xs text-slate-600 mb-4" id="lg-last-updated"></p>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4" id="link-stats">
+      <div class="card"><div class="stat-value" id="lg-total">-</div><div class="stat-label">Pages</div></div>
+      <div class="card"><div class="stat-value" id="lg-links">-</div><div class="stat-label">Links</div></div>
+      <div class="card"><div class="stat-value text-red-400" id="lg-orphans">-</div><div class="stat-label">Orphan Pages</div></div>
+      <div class="card"><div class="stat-value" id="lg-avg">-</div><div class="stat-label">Avg Links/Page</div></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="card mb-4">
+      <div class="flex flex-wrap gap-3 items-center">
+        <input id="lg-search" type="text" placeholder="Search pages…" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 w-48 focus:outline-none focus:border-indigo-500">
+        <select id="lg-category" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+          <option value="">All Categories</option>
+        </select>
+        <div class="flex gap-1">
+          <button onclick="lgHighlight('all')" class="lg-btn badge badge-blue" data-mode="all">All</button>
+          <button onclick="lgHighlight('categories')" class="lg-btn badge" style="background:#1e1b4b;color:#a5b4fc;cursor:pointer">◆ Categories</button>
+          <button onclick="lgHighlight('orphans')" class="lg-btn badge" style="background:#1e1b4b;color:#a5b4fc;cursor:pointer">Orphans</button>
+          <button onclick="lgHighlight('no-inbound')" class="lg-btn badge" style="background:#1e1b4b;color:#a5b4fc;cursor:pointer">No Inbound</button>
+          <button onclick="lgHighlight('no-outbound')" class="lg-btn badge" style="background:#1e1b4b;color:#a5b4fc;cursor:pointer">No Outbound</button>
+        </div>
+        <button onclick="lgResetView()" class="badge badge-green" style="cursor:pointer">Reset View</button>
+      </div>
+    </div>
+
+    <!-- Graph + Detail Panel -->
+    <div class="flex gap-4" style="height:calc(100vh - 320px); min-height:400px;">
+      <div class="card flex-1 relative overflow-hidden p-0" id="lg-graph-container">
+        <div id="lg-graph" style="width:100%;height:100%;"></div>
+      </div>
+      <div id="lg-detail" class="card hidden" style="width:320px; overflow-y:auto;">
+        <h3 class="text-lg font-bold text-slate-100 mb-1" id="lg-detail-title">-</h3>
+        <div class="text-xs text-slate-500 mb-3" id="lg-detail-category">-</div>
+        <div class="text-xs text-slate-400 mb-3 break-all" id="lg-detail-url">-</div>
+        <div class="mb-3">
+          <div class="text-xs font-semibold text-slate-400 uppercase mb-1">Outbound Links (<span id="lg-detail-out-count">0</span>)</div>
+          <div id="lg-detail-outbound" class="text-sm text-slate-300 space-y-1"></div>
+        </div>
+        <div>
+          <div class="text-xs font-semibold text-slate-400 uppercase mb-1">Inbound Links (<span id="lg-detail-in-count">0</span>)</div>
+          <div id="lg-detail-inbound" class="text-sm text-slate-300 space-y-1"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="card mt-4">
+      <div class="flex flex-wrap items-center gap-4">
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Legend</div>
+        <div class="flex items-center gap-1.5 text-xs text-slate-400">
+          <svg width="14" height="14" viewBox="0 0 14 14"><polygon points="7,1 13,13 1,13" fill="#6366f1"/></svg>
+          Category page
+        </div>
+        <div class="flex items-center gap-1.5 text-xs text-slate-400">
+          <svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="#4ade80" opacity="0.8"/></svg>
+          Article page
+        </div>
+        <div class="flex items-center gap-1.5 text-xs text-slate-400">
+          <svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="#1e293b" stroke="#ef4444" stroke-width="2"/></svg>
+          Orphan (no links at all)
+        </div>
+        <div class="text-xs text-slate-600">· Bubble size = total links · Color = category · Edges from ◆ = Hugo auto-links to articles · Edges to ◆ = explicit article→category links</div>
+        <div id="lg-cat-legend" class="flex flex-wrap gap-2 ml-2"></div>
+      </div>
+    </div>
+
+    <!-- Category Coverage -->
+    <div class="card mt-4">
+      <h2 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider cursor-pointer" onclick="document.getElementById('lg-coverage').classList.toggle('hidden')">
+        Category Coverage <span class="text-slate-600 normal-case font-normal">(click to toggle) — Hugo auto-links category→articles · do articles link back to their category?</span>
+      </h2>
+      <div id="lg-coverage">
+        <div id="lg-coverage-list" class="space-y-3"></div>
+      </div>
+    </div>
+
+    <!-- Pillar Article Coverage -->
+    <div class="card mt-4">
+      <div class="flex items-center justify-between mb-1 cursor-pointer" onclick="document.getElementById('lg-pillar').classList.toggle('hidden')">
+        <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Pillar Article Coverage</h2>
+        <div class="flex gap-3 text-xs">
+          <span class="text-red-400" id="lg-pillar-missing-count">—</span>
+          <span class="text-yellow-400" id="lg-pillar-incomplete-count">—</span>
+          <span class="text-green-400" id="lg-pillar-complete-count">—</span>
+        </div>
+      </div>
+      <p class="text-xs text-slate-600 mb-3">Each category should have a pillar article (slug = category slug) that links to every article in its category. <span class="cursor-pointer underline" onclick="document.getElementById('lg-pillar').classList.toggle('hidden')">toggle</span></p>
+      <div id="lg-pillar">
+        <div id="lg-pillar-list" class="space-y-2"></div>
+      </div>
+    </div>
+
+    <!-- Linking Opportunities -->
+    <div class="card mt-4">
+      <h2 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider cursor-pointer" onclick="document.getElementById('lg-opportunities').classList.toggle('hidden')">
+        Linking Opportunities (click to toggle)
+      </h2>
+      <div id="lg-opportunities" class="hidden">
+        <div id="lg-opp-list" class="space-y-2 text-sm text-slate-300"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WordPress Sync Section -->
+  <div id="section-blog-wp-sync" class="section p-6">
+    <div class="flex flex-wrap items-center gap-3 mb-2">
+      <h1 class="text-xl font-bold text-slate-100">WordPress Sync</h1>
+      <button class="btn btn-sm btn-primary" onclick="runWpSync()">Run Sync</button>
+      <button class="btn btn-sm" style="background:#334155;color:#94a3b8;" onclick="loadWpSync()">Refresh</button>
+      <a class="btn btn-sm" style="background:#1e293b;color:#cbd5e1;" href="/api/blog/wp-sync/csv" target="_blank" rel="noopener">Download CSV</a>
+    </div>
+    <p class="text-sm text-slate-500 mb-4">Syncs WordPress posts/pages via REST API, classifies by taxonomy, and builds internal backlink graph data for the dashboard.</p>
+
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+      <div class="card"><div class="stat-value" id="wps-count">-</div><div class="stat-label">Articles Synced</div></div>
+      <div class="card"><div class="stat-value" id="wps-fetched">-</div><div class="stat-label">Last Fetch Count</div></div>
+      <div class="card"><div class="stat-value" id="wps-upserted">-</div><div class="stat-label">Last Upsert Count</div></div>
+      <div class="card"><div class="stat-value text-indigo-400" id="wps-graph-nodes">-</div><div class="stat-label">Graph Nodes</div></div>
+      <div class="card"><div class="stat-value text-emerald-400" id="wps-graph-edges">-</div><div class="stat-label">Graph Edges</div></div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <div><span class="text-slate-500">Configured:</span> <span id="wps-configured" class="text-slate-300">-</span></div>
+        <div><span class="text-slate-500">API Base:</span> <span id="wps-site" class="text-slate-300">-</span></div>
+        <div><span class="text-slate-500">API Interval:</span> <span id="wps-interval" class="text-slate-300">-</span></div>
+        <div><span class="text-slate-500">Latest Run:</span> <span id="wps-last-run" class="text-slate-300">-</span></div>
+        <div><span class="text-slate-500">Run Status:</span> <span id="wps-last-status" class="text-slate-300">-</span></div>
+        <div><span class="text-slate-500">Saved HTML Path:</span> <span id="wps-content-dir" class="text-slate-300">-</span></div>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-slate-400">Sync Progress</span>
+        <span class="text-xs font-semibold text-slate-300" id="wps-progress-label">idle</span>
+      </div>
+      <div class="w-full bg-slate-900 rounded-full h-3">
+        <div id="wps-progress-bar" class="h-3 rounded-full bg-indigo-500 transition-all duration-300" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="card mb-4 overflow-x-auto">
+      <div class="flex flex-wrap gap-2 items-center mb-3">
+        <input id="wps-search" type="text" placeholder="Search slug/title…" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 w-64 focus:outline-none focus:border-indigo-500">
+        <input id="wps-type" type="text" placeholder="Type (post/page…)" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 w-44 focus:outline-none focus:border-indigo-500">
+        <input id="wps-status-filter" type="text" placeholder="Status (publish/draft…)" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 w-52 focus:outline-none focus:border-indigo-500">
+        <input id="wps-category" type="text" placeholder="Category keyword" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 w-48 focus:outline-none focus:border-indigo-500">
+        <button class="btn btn-sm btn-primary" onclick="loadWpArticles(1)">Apply</button>
+      </div>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs text-slate-500 uppercase border-b border-slate-700">
+            <th class="pb-2 pr-3">Type</th>
+            <th class="pb-2 pr-3">Status</th>
+            <th class="pb-2 pr-3">Slug</th>
+            <th class="pb-2 pr-3">Title (Link)</th>
+            <th class="pb-2 pr-3 text-right">In</th>
+            <th class="pb-2 pr-3 text-right">Out</th>
+            <th class="pb-2">Categories</th>
+          </tr>
+        </thead>
+        <tbody id="wps-table-body">
+          <tr><td colspan="7" class="py-4 text-slate-500"><span class="loading-spinner"></span>Loading WordPress records…</td></tr>
+        </tbody>
+      </table>
+      <div class="flex items-center justify-between mt-3 text-xs text-slate-400">
+        <div id="wps-page-summary">Showing 0 of 0</div>
+        <div class="flex items-center gap-2">
+          <button id="wps-page-prev" class="btn btn-sm" style="background:#334155;color:#cbd5e1;" onclick="loadWpArticles(wpsPage - 1)">Prev</button>
+          <span id="wps-page-label" class="text-slate-300">Page 1</span>
+          <button id="wps-page-next" class="btn btn-sm" style="background:#334155;color:#cbd5e1;" onclick="loadWpArticles(wpsPage + 1)">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">WordPress Link Graph Summary</h2>
+      <div id="wps-graph-summary" class="text-sm text-slate-300">Loading…</div>
+    </div>
+
+    <div class="card mt-4">
+      <h2 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Existing Feature Coverage</h2>
+      <div id="wps-feature-coverage" class="text-sm text-slate-300">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Affiliates Section -->
+  <div id="section-blog-affiliates" class="section p-6">
+    <div class="flex flex-wrap items-center gap-3 mb-2">
+      <h1 class="text-xl font-bold text-slate-100">Affiliate Analytics</h1>
+      <button class="btn btn-sm" style="background:#334155;color:#94a3b8;" onclick="refreshAffiliates()" id="aff-refresh-btn">Refresh from Short.io</button>
+    </div>
+    <p class="text-sm text-slate-500 mb-1">Short.io click tracking for https://unabhaengiger-finanzberater.de/</p>
+    <p class="text-xs text-slate-600 mb-4" id="aff-snapshot-info"></p>
+
+    <!-- Domain Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4" id="aff-stats">
+      <div class="card"><div class="stat-value" id="aff-total-links">-</div><div class="stat-label">Total Links</div></div>
+      <div class="card"><div class="stat-value" id="aff-month-clicks">-</div><div class="stat-label">Clicks (Month)</div></div>
+      <div class="card"><div class="stat-value text-green-400" id="aff-month-human">-</div><div class="stat-label">Human (Month)</div></div>
+      <div class="card"><div class="stat-value" id="aff-prev-clicks">-</div><div class="stat-label">Prev Month</div></div>
+      <div class="card"><div class="stat-value" id="aff-change">-</div><div class="stat-label">Change</div></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="flex flex-wrap gap-3 items-center mb-4">
+      <input id="aff-search" type="text" placeholder="Search links…" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 w-full sm:w-48 focus:outline-none focus:border-indigo-500">
+      <select id="aff-sort" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 w-full sm:w-auto focus:outline-none focus:border-indigo-500">
+        <option value="humanClicks">Sort: 2-Month Human</option>
+        <option value="monthHuman">Sort: This Month Human</option>
+        <option value="totalClicks">Sort: 2-Month Total</option>
+        <option value="pages">Sort: Most Pages</option>
+        <option value="path">Sort: Name (A-Z)</option>
+      </select>
+      <label class="text-sm text-slate-400 flex items-center gap-2">
+        <input type="checkbox" id="aff-hide-zero" class="rounded"> Hide zero clicks
+      </label>
+    </div>
+
+    <!-- Links Table -->
+    <div class="card overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs text-slate-500 uppercase border-b border-slate-700">
+            <th class="pb-2 pr-4">Link</th>
+            <th class="pb-2 pr-4 text-right">2-Mo Human</th>
+            <th class="pb-2 pr-4 text-right">2-Mo Total</th>
+            <th class="pb-2 pr-4 text-right">This Month (Human)</th>
+            <th class="pb-2 pr-4 text-right">This Month (Total)</th>
+            <th class="pb-2">Pages</th>
+          </tr>
+        </thead>
+        <tbody id="aff-table-body">
+          <tr><td colspan="6" class="py-4 text-slate-500"><span class="loading-spinner"></span>Loading affiliate data…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Skills Section -->
+  <div id="section-skills" class="section p-6">
+    <h1 class="text-xl font-bold text-slate-100 mb-6">Skills</h1>
+    <div id="skills-list">Loading…</div>
+  </div>
+
+  <!-- Interlinking Section -->
+  <div id="section-blog-interlinking" class="section p-6">
+    <div class="flex flex-wrap items-center gap-3 mb-1">
+      <h1 class="text-xl font-bold text-slate-100">Interlinking Opportunities</h1>
+      <button class="btn btn-sm btn-primary" onclick="loadInterlinking()">Refresh</button>
+    </div>
+    <p class="text-sm text-slate-500 mb-1">Orphan &amp; weakly-linked pages. Run <code class="text-indigo-400">python3 blog_automation/interlinking_agent.py --limit 20</code> to generate Claude suggestions.</p>
+    <p class="text-xs text-slate-600 mb-1" id="il-last-run"></p>
+    <p class="text-xs text-slate-600 mb-4" id="il-graph-updated"></p>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="card"><div class="stat-value text-red-400" id="il-orphans">-</div><div class="stat-label">Full Orphans</div></div>
+      <div class="card"><div class="stat-value text-amber-400" id="il-no-inbound">-</div><div class="stat-label">No Inbound</div></div>
+      <div class="card"><div class="stat-value text-yellow-400" id="il-weak">-</div><div class="stat-label">Weak (1 link)</div></div>
+      <div class="card"><div class="stat-value text-indigo-400" id="il-suggestions">-</div><div class="stat-label">With Suggestions</div></div>
+    </div>
+
+    <!-- Change Log -->
+    <div class="card mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <span class="text-sm font-semibold text-slate-200">Cron Change Log</span>
+          <span class="text-xs text-slate-500 ml-2">Links applied every 6 hours — track GSC impact after each change</span>
+        </div>
+        <button class="btn btn-sm" onclick="loadInterlinkingChanges()" style="font-size:11px">Refresh</button>
+      </div>
+      <div id="il-changes-list"><p class="text-xs text-slate-600">Loading change log…</p></div>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex gap-3 mb-4 flex-wrap">
+      <select id="il-filter" onchange="ilApplyFilter()" style="width:180px">
+        <option value="orphans">Full Orphans</option>
+        <option value="no-inbound">No Inbound</option>
+        <option value="weak">Weak Inbound</option>
+        <option value="all">All Problem Pages</option>
+      </select>
+      <input id="il-search" placeholder="Filter by slug…" oninput="ilApplyFilter()" style="width:200px">
+    </div>
+
+    <div id="il-list">Loading…</div>
+  </div>
+
+  <!-- Cannibalism Section -->
+  <div id="section-blog-cannibalism" class="section p-6">
+    <div class="flex flex-wrap items-center gap-3 mb-1">
+      <h1 class="text-xl font-bold text-slate-100">Keyword Cannibalism</h1>
+      <button class="btn btn-sm btn-primary" onclick="loadCannibalism()">Refresh</button>
+    </div>
+    <p class="text-sm text-slate-500 mb-1">GSC: queries where multiple articles compete. Structural: slug/title/intent overlap detected by Claude (run <code class="text-indigo-400">python3 blog_automation/cannibalism_agent.py</code>).</p>
+    <p class="text-xs text-slate-600 mb-4" id="cb-last-run"></p>
+
+    <!-- GSC section -->
+    <div class="mb-6">
+      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">GSC-Backed Conflicts <span class="text-slate-600 normal-case font-normal">(real search impressions)</span></h2>
+      <div id="cb-gsc-list">Loading…</div>
+    </div>
+
+    <!-- Structural section -->
+    <div>
+      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">Structural Conflicts <span class="text-slate-600 normal-case font-normal">(Claude analysis of slug/title/intent)</span></h2>
+      <div id="cb-structural-list">No structural analysis yet — run the cannibalism agent.</div>
+    </div>
+  </div>
+
+  <!-- AI Usage Section -->
+  <div id="section-blog-ai-usage" class="section p-6">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-xl font-bold text-slate-100">AI Usage &amp; Quotas</h1>
+        <p class="text-sm text-slate-500 mt-1">Live rate-limit quotas · token spend · billing breakdown</p>
+      </div>
+      <div class="flex gap-2 items-center">
+        <select id="blog-token-period" onchange="loadBlogTokens()">
+          <option value="month">This month</option>
+          <option value="week">Last 7 days</option>
+          <option value="today">Today</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="loadBlogTokens(); loadBlogQuota()">Refresh</button>
+      </div>
+    </div>
+
+    <!-- Provider quota cards -->
+    <div class="mb-2 flex items-center justify-between">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Provider Quotas</h2>
+      <p class="text-xs text-slate-600">Per-provider rate % is only shown when a vendor exposes it; token spend above is from local usage logs. Cached 5 min · <span id="blog-quota-cached-at">—</span></p>
+    </div>
+    <div id="blog-quota-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-6">
+      <div class="card text-slate-500 text-sm col-span-full">Loading…</div>
+    </div>
+
+    <!-- Cost stat cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="card">
+        <div class="stat-value text-indigo-400 text-2xl" id="blog-tok-total-cost">—</div>
+        <div class="stat-label">Est. total cost</div>
+      </div>
+      <div class="card">
+        <div class="stat-value text-blue-400 text-2xl" id="blog-tok-total-input">—</div>
+        <div class="stat-label">Input tokens</div>
+      </div>
+      <div class="card">
+        <div class="stat-value text-purple-400 text-2xl" id="blog-tok-total-output">—</div>
+        <div class="stat-label">Output tokens</div>
+      </div>
+      <div class="card">
+        <div class="stat-value text-green-400 text-2xl" id="blog-tok-cache-savings">—</div>
+        <div class="stat-label">Cache read tokens</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">By Model</h2>
+        <div id="blog-tok-by-model">Loading…</div>
+      </div>
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">By Agent / Project</h2>
+        <div id="blog-tok-by-agent">Loading…</div>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Daily Breakdown</h2>
+      <div id="blog-tok-daily" style="overflow-x:auto">Loading…</div>
+    </div>
+
+    <div class="card mb-4">
+      <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Agent × Model Detail</h2>
+      <div id="blog-tok-agent-model" style="overflow-x:auto">Loading…</div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="card">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Anthropic Billing API</h2>
+          <span class="badge badge-gray" id="blog-tok-anthropic-status">checking…</span>
+        </div>
+        <div id="blog-tok-anthropic">Loading…</div>
+      </div>
+      <div class="card">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">OpenAI Billing API</h2>
+          <span class="badge badge-gray" id="blog-tok-openai-status">checking…</span>
+        </div>
+        <div id="blog-tok-openai">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script src="shared.js"></script>
+<script>
+// ============================================================
+// State
+// ============================================================
+let currentSection = 'blog';
+let sseSource = null;
+let sseConnected = false;
+
+// ============================================================
+// Navigation
+// ============================================================
+function navigate(section) {
+  const prevSection = currentSection;
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('open');
+  }
+  document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  if (event && event.currentTarget) event.currentTarget.classList.add('active');
+  document.getElementById('section-' + section).classList.add('active');
+  currentSection = section;
+  if (prevSection === 'blog-audit' && section !== 'blog-audit') stopAuditStatusPoll();
+
+  if (section === 'blog') loadBlog();
+  else if (section === 'blog-audit') { loadAudit(); initAuditRunPanel(); }
+  else if (section === 'blog-queue') loadBlogQueue();
+  else if (section === 'blog-perf') loadPerformance();
+  else if (section === 'blog-agents') loadBlogAgents();
+  else if (section === 'blog-links') loadLinkGraph();
+  else if (section === 'blog-wp-sync') loadWpSync();
+  else if (section === 'blog-affiliates') loadAffiliates();
+  else if (section === 'blog-interlinking') loadInterlinking();
+  else if (section === 'blog-cannibalism') loadCannibalism();
+  else if (section === 'blog-ai-usage') { loadBlogTokens(); loadBlogQuota(); }
+}
+
+// ============================================================
+// Blog functions
+// ============================================================
+// Blog Overview
+// ============================================================
+async function loadBlog() {
+  try {
+    const [stats, audit] = await Promise.all([
+      api('/api/blog/stats'),
+      api('/api/blog/audit?limit=100&sort=seo_score&order=asc'),
+    ]);
+
+    const done = stats.rewriteDone, total = stats.rewriteTotal;
+    const pct = total ? Math.round(done / total * 100) : 0;
+
+    // Date range header
+    if (stats.firstRewriteDate) {
+      const first = new Date(stats.firstRewriteDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const last = stats.lastRewriteDate ? new Date(stats.lastRewriteDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'now';
+      document.getElementById('blog-date-range').textContent = `Running since ${first} — last update ${last}`;
+    }
+
+    // Headline stat cards
+    document.getElementById('blog-rewrite-progress').textContent = `${done}`;
+    document.getElementById('blog-pending-count').textContent = `${stats.rewritePending}`;
+    // Show ETA under the Remaining card
+    const remainingCard = document.getElementById('blog-pending-count').parentElement;
+    const etaNote = remainingCard.querySelector('.eta-note');
+    if (etaNote) etaNote.remove();
+    if (stats.eta && stats.eta.daysRemaining > 0) {
+      const etaEl = document.createElement('div');
+      etaEl.className = 'text-xs text-slate-500 mt-1 eta-note';
+      etaEl.textContent = `Done by ${new Date(stats.eta.estimatedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
+      remainingCard.appendChild(etaEl);
+    }
+    document.getElementById('blog-failed-count').textContent = `${stats.rewriteFailed}`;
+    document.getElementById('blog-avg-seo').textContent = stats.avgSeo ? stats.avgSeo + '/100' : 'N/A';
+    document.getElementById('blog-avg-geo').textContent = stats.avgGeo ? stats.avgGeo + '/100' : 'N/A';
+    document.getElementById('blog-seo-scored-note').textContent = stats.seoScoredCount ? `${stats.seoScoredCount} scored articles` : '';
+    document.getElementById('blog-geo-scored-note').textContent = stats.geoScoredCount ? `${stats.geoScoredCount} scored articles` : '';
+
+    // Rewrite progress with visual bar
+    document.getElementById('blog-queue-summary').innerHTML = `
+      <div class="space-y-3">
+        <div class="flex justify-between items-center">
+          <span class="text-sm text-slate-400">${done} of ${total} articles rewritten</span>
+          <span class="text-lg font-bold text-indigo-400">${pct}%</span>
+        </div>
+        <div class="w-full bg-slate-900 rounded-full h-3">
+          <div class="h-3 rounded-full relative overflow-hidden" style="width:${pct}%;background:linear-gradient(90deg,#6366f1,#818cf8)">
+            ${pct > 5 ? `<div class="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">${pct}%</div>` : ''}
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-3 mt-2">
+          <div class="bg-slate-900 rounded p-3 text-center">
+            <div class="text-lg font-bold text-green-400">${stats.rewriteDone}</div>
+            <div class="text-xs text-slate-500">Done</div>
+          </div>
+          <div class="bg-slate-900 rounded p-3 text-center">
+            <div class="text-lg font-bold text-yellow-400">${stats.rewritePending}</div>
+            <div class="text-xs text-slate-500">Pending</div>
+          </div>
+          <div class="bg-slate-900 rounded p-3 text-center">
+            <div class="text-lg font-bold text-red-400">${stats.rewriteFailed}</div>
+            <div class="text-xs text-slate-500">Failed</div>
+          </div>
+        </div>
+        <div class="text-xs text-slate-500 mt-1">Total articles on disk: ${total}</div>
+        ${stats.eta && stats.eta.daysRemaining > 0 ? `
+        <div class="bg-slate-900 rounded p-3 mt-3 text-center">
+          <div class="text-sm text-slate-400">Estimated completion</div>
+          <div class="text-lg font-bold text-indigo-400">${new Date(stats.eta.estimatedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+          <div class="text-xs text-slate-500">${stats.eta.daysRemaining} days remaining at ${stats.eta.articlesPerDay} articles/day</div>
+        </div>` : stats.rewritePending === 0 ? `
+        <div class="bg-slate-900 rounded p-3 mt-3 text-center">
+          <div class="text-lg font-bold text-green-400">All done!</div>
+        </div>` : ''}
+      </div>`;
+
+    // Before/After Performance comparison + KPI cards
+    const perf = stats.perfSummary;
+    if (perf && perf.articlesWithData > 0) {
+      const clicksDelta = perf.totalClicksAfter - perf.totalClicksBefore;
+      const clicksPct = perf.totalClicksBefore > 0 ? Math.round(clicksDelta / perf.totalClicksBefore * 100) : 0;
+      const impDelta = perf.totalImpAfter - perf.totalImpBefore;
+      const impPct = perf.totalImpBefore > 0 ? Math.round(impDelta / perf.totalImpBefore * 100) : 0;
+      const posDelta = perf.avgPosDelta;
+
+      // Search KPI cards at the top
+      function kpiCard(elId, value, delta, pct, higherIsBetter) {
+        const isPos = higherIsBetter ? delta > 0 : delta < 0;
+        const color = delta === 0 ? 'text-slate-400' : isPos ? 'text-green-400' : 'text-red-400';
+        const arrow = delta > 0 ? '↑' : delta < 0 ? '↓' : '';
+        document.getElementById(elId).innerHTML = `
+          <div class="stat-value text-2xl text-slate-100">${value.toLocaleString()}</div>
+          <div class="stat-label">${elId.replace('kpi-','')}</div>
+          <div class="text-xs font-semibold ${color} mt-1">${arrow} ${Math.abs(pct)}% vs before rewrite</div>`;
+      }
+      kpiCard('kpi-clicks', perf.totalClicksAfter, clicksDelta, clicksPct, true);
+      kpiCard('kpi-impressions', perf.totalImpAfter, impDelta, impPct, true);
+      // Position KPI (lower = better)
+      const posColor = posDelta > 0 ? 'text-green-400' : posDelta < 0 ? 'text-red-400' : 'text-slate-400';
+      const posArrow = posDelta > 0 ? '↑' : posDelta < 0 ? '↓' : '';
+      document.getElementById('kpi-position').innerHTML = `
+        <div class="stat-value text-2xl text-slate-100">${perf.avgPosAfter}</div>
+        <div class="stat-label">Avg Position</div>
+        <div class="text-xs font-semibold ${posColor} mt-1">${posArrow} ${Math.abs(posDelta)} positions ${posDelta > 0 ? 'better' : posDelta < 0 ? 'worse' : ''}</div>`;
+
+      // Detailed comparison table
+      function metricRow(label, before, after, pctChange, higherIsBetter) {
+        const d = after - before;
+        const isPositive = higherIsBetter ? d > 0 : d < 0;
+        const color = d === 0 ? 'text-slate-400' : isPositive ? 'text-green-400' : 'text-red-400';
+        const arrow = d > 0 ? '↑' : d < 0 ? '↓' : '→';
+        return `<div class="flex items-center justify-between py-2.5 border-b border-slate-800">
+          <span class="text-sm text-slate-300">${label}</span>
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-slate-500">${before.toLocaleString()}</span>
+            <span class="text-xs text-slate-600">→</span>
+            <span class="text-sm font-semibold text-slate-200">${after.toLocaleString()}</span>
+            <span class="text-xs font-semibold ${color} w-14 text-right">${arrow} ${Math.abs(pctChange)}%</span>
+          </div>
+        </div>`;
+      }
+
+      const posLabel = posDelta > 0 ? 'improved' : posDelta < 0 ? 'dropped' : 'unchanged';
+      const skippedNote = perf.articlesSkipped > 0
+
+        ? `<div class="text-xs text-slate-600 mt-1">${perf.articlesSkipped} articles skipped (less than 2 days of data)</div>`
+        : '';
+
+      document.getElementById('blog-perf-comparison').innerHTML = `
+        <div class="mb-3">
+          <div class="text-xs text-slate-500 mb-1">Each article compared using equal days before vs after rewrite (avg ${perf.avgWindowDays}d window)</div>
+          <div class="text-xs text-slate-600">${perf.articlesWithData} articles included</div>
+        </div>
+        ${metricRow('Total Clicks', perf.totalClicksBefore, perf.totalClicksAfter, clicksPct, true)}
+        ${metricRow('Total Impressions', perf.totalImpBefore, perf.totalImpAfter, impPct, true)}
+        <div class="flex items-center justify-between py-2.5">
+          <span class="text-sm text-slate-300">Avg Position</span>
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-slate-500">${perf.avgPosBefore}</span>
+            <span class="text-xs text-slate-600">→</span>
+            <span class="text-sm font-semibold text-slate-200">${perf.avgPosAfter}</span>
+            <span class="text-xs font-semibold ${posColor} w-14 text-right">${posArrow} ${posLabel}</span>
+          </div>
+        </div>
+        ${skippedNote}`;
+    } else {
+      document.getElementById('blog-perf-comparison').innerHTML = '<p class="text-sm text-slate-500">Performance data will appear after articles have at least 2 days of post-rewrite data.</p>';
+    }
+
+    // Score distribution bars
+    function renderDist(elId, dist, total, type) {
+      const brackets = [
+        { key: 'excellent', label: '80-100', color: 'bg-green-500', textColor: 'text-green-400' },
+        { key: 'good', label: '60-79', color: 'bg-blue-500', textColor: 'text-blue-400' },
+        { key: 'fair', label: '40-59', color: 'bg-yellow-500', textColor: 'text-yellow-400' },
+        { key: 'poor', label: '0-39', color: 'bg-red-500', textColor: 'text-red-400' },
+      ];
+      const el = document.getElementById(elId);
+      if (!total) { el.innerHTML = '<p class="text-sm text-slate-500">No scored articles yet.</p>'; return; }
+      el.innerHTML = brackets.map(b => {
+        const count = dist[b.key] || 0;
+        const pct = Math.round(count / total * 100);
+        return `<div class="flex items-center gap-3 py-1.5">
+          <span class="text-xs text-slate-400 w-12">${b.label}</span>
+          <div class="flex-1 bg-slate-900 rounded-full h-2">
+            <div class="${b.color} h-2 rounded-full" style="width:${pct}%"></div>
+          </div>
+          <span class="text-xs font-semibold ${b.textColor} w-16 text-right">${count} (${pct}%)</span>
+        </div>`;
+      }).join('');
+    }
+    renderDist('blog-seo-dist', stats.seoDist, stats.seoScoredCount, 'SEO');
+    renderDist('blog-geo-dist', stats.geoDist, stats.geoScoredCount, 'GEO');
+
+    // Top issues
+    document.getElementById('blog-top-issues').innerHTML = audit.topIssues.length
+      ? audit.topIssues.slice(0, 8).map(i => {
+          const pct2 = Math.round(i.count / stats.auditCount * 100);
+          return `<div class="flex items-center gap-3 py-1.5">
+            <div class="flex-1 min-w-0">
+              <div class="flex justify-between mb-0.5">
+                <span class="text-xs text-slate-300">${escHtml(i.issue.replace(/_/g,' '))}</span>
+                <span class="text-xs text-red-400">${i.count} (${pct2}%)</span>
+              </div>
+              <div class="w-full bg-slate-900 rounded-full h-1.5">
+                <div class="bg-red-500 h-1.5 rounded-full" style="width:${pct2}%"></div>
+              </div>
+            </div>
+          </div>`;
+        }).join('')
+      : '<p class="text-slate-500 text-sm">No audit data.</p>';
+
+    // Activity
+    const la = stats.lastActivity;
+    document.getElementById('blog-activity').innerHTML = [
+      ['Rewrite progress', la.rewriteProgress],
+      ['Audit results', la.auditResults],
+      ['Scheduler queue', la.schedulerQueue],
+      ['Scheduler log', la.schedulerLog],
+    ].map(([label, ts]) => `
+      <div class="flex justify-between items-center py-1.5 border-b border-slate-800 last:border-0">
+        <span class="text-xs text-slate-400">${label}</span>
+        <span class="text-xs ${ts ? 'text-slate-300' : 'text-slate-600'}">${ts ? fmtTime(ts) : 'not found'}</span>
+      </div>`).join('');
+
+    // Scheduler log
+    try {
+      const sched = await api('/api/blog/scheduler');
+      const logEl = document.getElementById('blog-scheduler-log');
+      logEl.innerHTML = sched.logLines.length
+        ? sched.logLines.slice(-20).map(l => `<div class="log-line">${escHtml(l)}</div>`).join('')
+        : '<div class="log-line text-slate-600">No scheduler log found.</div>';
+      logEl.scrollTop = logEl.scrollHeight;
+    } catch(e) {}
+
+    // Load insights (fire and forget)
+    loadBlogInsights();
+  } catch(e) {
+    console.error('Blog load error:', e);
+  }
+}
+
+// ============================================================
+// Blog Insights
+// ============================================================
+async function loadBlogInsights() {
+  try {
+    const d = await api('/api/blog/insights');
+    if (d.error) return;
+    const section = document.getElementById('blog-insights');
+    section.style.display = 'block';
+
+    // ROI cards
+    const roiAvg = d.rewriteRoi.avgClicksDelta;
+    const roiEl = document.getElementById('insight-roi-avg');
+    roiEl.textContent = (roiAvg > 0 ? '+' : '') + roiAvg;
+    roiEl.className = 'stat-value text-2xl ' + (roiAvg > 0 ? 'text-green-400' : roiAvg < 0 ? 'text-red-400' : 'text-slate-400');
+    document.getElementById('insight-roi-total').textContent = (d.rewriteRoi.totalClicksDelta > 0 ? '+' : '') + d.rewriteRoi.totalClicksDelta.toLocaleString();
+    document.getElementById('insight-roi-pos').textContent = d.rewriteRoi.positive;
+    document.getElementById('insight-roi-neg').textContent = d.rewriteRoi.negative;
+
+    // Days to impact
+    document.getElementById('insight-days-avg').textContent = d.daysToImpact.avg !== null ? d.daysToImpact.avg + 'd' : 'N/A';
+    document.getElementById('insight-days-median').textContent = d.daysToImpact.median !== null ? d.daysToImpact.median + 'd' : 'N/A';
+
+    // Quick Wins
+    const qwEl = document.getElementById('insight-quick-wins');
+    if (d.quickWins.length) {
+      qwEl.innerHTML = d.quickWins.map(q =>
+        `<div class="flex justify-between items-center py-1 border-b border-slate-800 last:border-0">
+          <span class="text-slate-300 truncate mr-2" style="max-width:160px" title="${escHtml(q.slug)}">${escHtml(q.slug)}</span>
+          <span class="flex gap-3 flex-shrink-0 text-slate-400">
+            <span title="Avg daily impressions">${q.impressions} imp</span>
+            <span class="text-red-400" title="CTR">${q.ctr}%</span>
+            <span title="Avg position">pos ${q.position}</span>
+          </span>
+        </div>`
+      ).join('');
+    } else {
+      qwEl.innerHTML = '<span class="text-slate-500">No quick wins found — all high-impression articles have good CTR.</span>';
+    }
+
+    // Content Decay
+    const decayEl = document.getElementById('insight-decay');
+    if (d.contentDecay.length) {
+      decayEl.innerHTML = d.contentDecay.map(c =>
+        `<div class="flex justify-between items-center py-1 border-b border-slate-800 last:border-0">
+          <span class="text-slate-300 truncate mr-2" style="max-width:180px" title="${escHtml(c.slug)}">${escHtml(c.slug)}</span>
+          <span class="flex gap-3 flex-shrink-0">
+            <span class="text-slate-500">${c.prevClicks} → ${c.recentClicks}</span>
+            <span class="text-red-400 font-semibold">${c.delta}</span>
+          </span>
+        </div>`
+      ).join('');
+    } else {
+      decayEl.innerHTML = '<span class="text-slate-500">No declining articles detected.</span>';
+    }
+
+    // Cannibalization
+    const cannibEl = document.getElementById('insight-cannib');
+    if (d.cannibalization.length) {
+      cannibEl.innerHTML = d.cannibalization.map(c =>
+        `<div class="py-1.5 border-b border-slate-800 last:border-0">
+          <div class="flex justify-between mb-1">
+            <span class="text-slate-200 font-medium truncate mr-2" title="${escHtml(c.query)}">"${escHtml(c.query)}"</span>
+            <span class="flex gap-2 flex-shrink-0">
+              <span class="text-slate-500">${c.impressions.toLocaleString()} imp</span>
+              <span class="text-purple-400">${c.articleCount} articles</span>
+            </span>
+          </div>
+          <div class="text-slate-500">${c.slugs.map(s => escHtml(s)).join(', ')}</div>
+        </div>`
+      ).join('');
+    } else {
+      cannibEl.innerHTML = '<span class="text-slate-500">No keyword cannibalization detected.</span>';
+    }
+  } catch(e) {
+    // silently fail — insights are supplementary
+  }
+}
+
+// ============================================================
+// Blog Audit
+// ============================================================
+let auditStatePoll = null;
+
+function stopAuditStatusPoll() {
+  if (auditStatePoll) {
+    clearInterval(auditStatePoll);
+    auditStatePoll = null;
+  }
+}
+
+async function initAuditRunPanel() {
+  const el = document.getElementById('audit-run-status');
+  if (!el) return;
+  try {
+    const s = await api('/api/blog/audit/run-state');
+    if (s.running) {
+      el.textContent = 'Auditing… ' + s.processed + '/' + s.total;
+      startAuditStatusPoll();
+    } else {
+      el.textContent =
+        s.lastMessage && s.lastMessage !== 'completed' ? s.lastMessage : 'Idle — run a batch to score articles.';
+    }
+  } catch (e) {
+    el.textContent = '';
+  }
+}
+
+function startAuditStatusPoll() {
+  stopAuditStatusPoll();
+  const tick = async () => {
+    let s;
+    try {
+      s = await api('/api/blog/audit/run-state');
+    } catch (e) {
+      return;
+    }
+    const el = document.getElementById('audit-run-status');
+    if (s.running) {
+      if (el) {
+        el.textContent =
+          'Auditing… ' + s.processed + '/' + s.total + (s.lastMessage ? ' — ' + s.lastMessage : '');
+      }
+    } else {
+      if (el) {
+        if (s.lastMessage === 'completed') el.textContent = 'Last run finished.';
+        else if (s.lastMessage) el.textContent = s.lastMessage;
+        else el.textContent = 'Idle';
+      }
+      stopAuditStatusPoll();
+      if (s.lastMessage === 'completed' || s.processed > 0) await fetchAuditPage();
+    }
+  };
+  auditStatePoll = setInterval(tick, 10000);
+  tick();
+}
+
+async function runSeoAudit() {
+  const btn = document.getElementById('audit-run-btn');
+  const limitEl = document.getElementById('audit-run-limit');
+  const n = Math.min(50, Math.max(1, parseInt(String(limitEl && limitEl.value) || '10', 10) || 10));
+  if (btn) {
+    btn.disabled = true;
+  }
+  try {
+    const r = await postWithWriteAuth('/api/blog/audit/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit: n }),
+    });
+    const data = await r.json();
+    const stEl = document.getElementById('audit-run-status');
+    if (!r.ok) {
+      if (stEl) stEl.textContent = 'Error: ' + (data.error || r.status);
+      throw new Error(data.error || 'Request failed');
+    }
+    if (!data.started) {
+      if (stEl) stEl.textContent = data.message || 'Not started';
+      if (data.state && data.state.running) {
+        startAuditStatusPoll();
+      }
+      return;
+    }
+    if (stEl) stEl.textContent = data.message || 'Started';
+    startAuditStatusPoll();
+  } catch (e) {
+    alert('SEO audit: ' + e.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+    }
+  }
+}
+
+let auditOffset = 0;
+const auditLimit = 50;
+let auditTotal = 0;
+
+function formatAuditCheckLabel(id) {
+  if (!id) return '';
+  return id.split('_').map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : '')).join(' ');
+}
+
+function buildAuditDetailPanelHtml(a) {
+  const slugEnc = encodeURIComponent(a.slug || '');
+  const auditActions =
+    (a.slug
+      ? `<div class="flex flex-wrap items-center gap-2 mb-3 pb-3 border-b border-slate-700/80">
+      <button type="button" class="btn btn-primary btn-sm" data-audit-slug="${slugEnc}" onclick="event.stopPropagation(); auditRedoFromBtn(this)">${a.synthetic ? 'Run AI audit' : 'Redo AI audit'}</button>
+      ${!a.synthetic ? `<button type="button" class="btn btn-sm audit-btn-secondary" data-audit-slug="${slugEnc}" onclick="event.stopPropagation(); auditDeleteFromBtn(this)">Remove audit</button>` : ''}
+    </div>`
+      : '');
+
+  if (a.synthetic) {
+    return (
+      `<div class="audit-detail-inner">${auditActions}` +
+      '<p class="text-sm text-slate-400 m-0">This article has no AI audit row in the database yet. Run <b>WordPress Sync</b>, then <b>Run AI audit</b> (here or above) to get scores, summary, and per-criterion notes.</p></div>'
+    );
+  }
+  const checks = a.checks || {};
+  const entries = Object.keys(checks).length ? Object.entries(checks) : [];
+  const fail = entries.filter(([, c]) => c && c.status === 'FAIL');
+  const weak = entries.filter(([, c]) => c && c.status === 'PASS' && c.note === 'not_scored');
+  const pass = entries.filter(
+    ([, c]) => c && c.status === 'PASS' && c.note !== 'not_scored',
+  );
+
+  const parts = [];
+  const titleLine = a.title
+    ? `<div class="text-xs text-slate-500 mb-2 max-w-3xl">${escHtml(a.title)}</div>`
+    : '';
+
+  const sm = a.summary && String(a.summary).trim();
+  if (sm) {
+    parts.push(
+      `<div class="mb-3"><div class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Model summary</div>` +
+        `<p class="text-sm text-slate-200 mt-1.5 leading-relaxed m-0">${escHtml(sm)}</p></div>`,
+    );
+  }
+
+  parts.push(
+    `<div class="mb-3 text-xs text-slate-500 leading-relaxed">` +
+      `<span class="text-slate-300">SEO</span> and <span class="text-slate-300">GEO</span> are 0–100 rollups: aim for <b>≥70</b>. ` +
+      `They rise when you fix failed checks and improve clarity, trust signals, and intent match. ` +
+      (a.model ? `<span class="text-slate-600">· ${escHtml(a.model)}</span>` : '') +
+      `</div>`,
+  );
+
+  if (fail.length) {
+    let fl =
+      '<div class="mb-3"><div class="text-xs font-semibold text-red-400 uppercase tracking-wide mb-2">Failed criteria — what to improve</div><ul class="space-y-2.5 list-none m-0 p-0">';
+    for (const [id, c] of fail) {
+      const note =
+        c && c.note && c.note !== 'not_scored'
+          ? escHtml(c.note)
+          : 'Strengthen this area; align the page with standard SEO/GEO best practices for this point.';
+      fl +=
+        `<li class="border-l-2 border-red-500/60 pl-3 py-0.5">` +
+        `<span class="text-slate-200 text-sm font-medium">${escHtml(formatAuditCheckLabel(id))}</span>` +
+        `<p class="text-slate-400 text-sm mt-0.5 m-0">${note}</p></li>`;
+    }
+    fl += '</ul></div>';
+    parts.push(fl);
+  }
+
+  if (weak.length) {
+    parts.push(
+      `<div class="mb-3 text-sm text-amber-200/90 bg-amber-950/30 border border-amber-900/50 rounded-lg px-3 py-2">` +
+        `<span class="font-semibold">Not fully scored by the model:</span> ` +
+        weak.map(([id]) => formatAuditCheckLabel(id)).join(', ') +
+        `. Re-run the AI audit to get a clear pass/fail on each.</div>`,
+    );
+  }
+
+  if (pass.length) {
+    let pl =
+      '<details class="text-sm audit-passed-details"><summary class="cursor-pointer text-slate-500 hover:text-slate-400">Passed checks (' +
+      pass.length +
+      ')</summary><ul class="mt-2 space-y-1 list-disc pl-5 text-slate-500 m-0">';
+    for (const [id, c] of pass) {
+      const pnote = c && c.note ? ' — ' + escHtml(c.note) : '';
+      pl += `<li><span class="text-emerald-500/90">${escHtml(formatAuditCheckLabel(id))}</span>${pnote}</li>`;
+    }
+    pl += '</ul></details>';
+    parts.push(pl);
+  }
+
+  if (!entries.length && !sm) {
+    parts.push(
+      '<p class="text-sm text-slate-500 m-0">No per-criterion data yet. Run an AI audit to store checks and a summary.</p>',
+    );
+  }
+
+  return `<div class="audit-detail-inner">${auditActions}${titleLine}${parts.join('')}</div>`;
+}
+
+function toggleAuditRow(tr) {
+  const detail = tr.nextElementSibling;
+  if (!detail || detail.getAttribute('data-audit-detail') !== '1') return;
+  detail.classList.toggle('is-open');
+  tr.classList.toggle('is-open');
+  const mark = tr.querySelector('.audit-chevron');
+  if (mark) mark.textContent = detail.classList.contains('is-open') ? '▾' : '▸';
+}
+
+async function auditRedoFromBtn(btn) {
+  const raw = btn.getAttribute('data-audit-slug');
+  if (raw == null || raw === '') return;
+  const slug = decodeURIComponent(raw);
+  btn.disabled = true;
+  try {
+    const r = await postWithWriteAuth('/api/blog/audit/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      alert(data.error || 'Request failed');
+      return;
+    }
+    if (!data.started) {
+      alert(data.message || 'Could not start audit');
+      return;
+    }
+    const stEl = document.getElementById('audit-run-status');
+    if (stEl) stEl.textContent = data.message || 'Auditing…';
+    startAuditStatusPoll();
+  } catch (e) {
+    alert('SEO audit: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function auditDeleteFromBtn(btn) {
+  const raw = btn.getAttribute('data-audit-slug');
+  if (raw == null || raw === '') return;
+  const slug = decodeURIComponent(raw);
+  if (!confirm('Remove the stored SEO audit for this article from the database? (WordPress content is unchanged.)')) {
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const r = await postWithWriteAuth('/api/blog/audit/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      alert(data.error || 'Delete failed');
+      return;
+    }
+    await fetchAuditPage();
+    if (typeof loadBlog === 'function') void loadBlog();
+  } catch (e) {
+    alert('Remove audit: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadAudit() {
+  auditOffset = 0;
+  await fetchAuditPage();
+}
+
+async function fetchAuditPage() {
+  const sortRaw = document.getElementById('audit-sort').value;
+  let sort = sortRaw, order = 'asc';
+  if (sortRaw.endsWith('_desc')) { sort = sortRaw.replace('_desc', ''); order = 'desc'; }
+  else if (sortRaw === 'failCount') { sort = 'failCount'; order = 'desc'; }
+
+  const tbody = document.getElementById('audit-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="text-center text-slate-500 py-4">Loading…</td></tr>';
+  try {
+    const data = await api(`/api/blog/audit?limit=${auditLimit}&offset=${auditOffset}&sort=${sort}&order=${order}`);
+    auditTotal = data.total;
+    document.getElementById('audit-count').textContent =
+      `${auditOffset+1}–${Math.min(auditOffset+auditLimit, auditTotal)} of ${auditTotal}`;
+    document.getElementById('audit-prev-btn').disabled = auditOffset === 0;
+    document.getElementById('audit-next-btn').disabled = auditOffset + auditLimit >= auditTotal;
+
+    tbody.innerHTML = data.articles
+      .map((a) => {
+        const seoColor = a.seo_score >= 70 ? 'text-green-400' : a.seo_score >= 50 ? 'text-yellow-400' : 'text-red-400';
+        const geoColor = a.geo_score >= 70 ? 'text-green-400' : a.geo_score >= 50 ? 'text-yellow-400' : 'text-red-400';
+        const main = `<tr class="audit-row-expandable" onclick="toggleAuditRow(this)">
+        <td class="text-xs font-mono text-slate-300"><span class="audit-chevron text-slate-500 mr-1.5 select-none" aria-hidden="true">▸</span>${escHtml(a.slug || '')}</td>
+        <td>
+          <div class="flex items-center gap-2">
+            <div class="w-16 bg-slate-900 rounded-full h-1.5">
+              <div class="h-1.5 rounded-full ${a.seo_score>=70?'bg-green-500':a.seo_score>=50?'bg-yellow-500':'bg-red-500'}" style="width:${a.seo_score}%"></div>
+            </div>
+            <span class="text-xs font-semibold ${seoColor}">${a.seo_score}</span>
+          </div>
+        </td>
+        <td>
+          <div class="flex items-center gap-2">
+            <div class="w-16 bg-slate-900 rounded-full h-1.5">
+              <div class="h-1.5 rounded-full ${a.geo_score>=70?'bg-green-500':a.geo_score>=50?'bg-yellow-500':'bg-red-500'}" style="width:${a.geo_score}%"></div>
+            </div>
+            <span class="text-xs font-semibold ${geoColor}">${a.geo_score}</span>
+          </div>
+        </td>
+        <td class="text-xs ${a.failCount>10?'text-red-400':a.failCount>5?'text-yellow-400':'text-slate-400'}">${a.failCount}</td>
+        <td class="text-xs text-slate-500">${fmtTime(a.audited_at)}</td>
+      </tr>
+      <tr class="audit-detail-tr" data-audit-detail="1" onclick="event.stopPropagation()">
+        <td colspan="5" class="!p-0 bg-slate-950/50 border-b border-slate-800 align-top">${buildAuditDetailPanelHtml(a)}</td>
+      </tr>`;
+        return main;
+      })
+      .join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-red-400 py-4">${escHtml(String(e))}</td></tr>`;
+  }
+}
+function auditPrev() { if (auditOffset > 0) { auditOffset -= auditLimit; fetchAuditPage(); } }
+function auditNext() { if (auditOffset + auditLimit < auditTotal) { auditOffset += auditLimit; fetchAuditPage(); } }
+
+// ============================================================
+// Blog Rewrite Queue
+// ============================================================
+async function loadBlogQueue() {
+  try {
+    const data = await api('/api/blog/rewrite-queue');
+    const pending = data.queue || [];
+    const done = data.done || [];
+    const failed = data.failed || {};
+
+    document.getElementById('rq-pending-count').textContent = pending.length;
+    document.getElementById('rq-done-count').textContent = done.length;
+    document.getElementById('rq-failed-count').textContent = Object.keys(failed).length;
+
+    // Pending
+    document.getElementById('rq-pending').innerHTML = pending.length
+      ? pending.map(s => `<div class="py-1.5 border-b border-slate-800 last:border-0 text-xs font-mono text-yellow-300">${escHtml(s)}</div>`).join('')
+      : '<p class="text-slate-500 text-sm">Queue is empty.</p>';
+
+    // Done
+    document.getElementById('rq-done').innerHTML = done.length
+      ? done.map(s => `<div class="bg-slate-900 rounded px-2 py-1 text-xs font-mono text-green-400 truncate" title="${escHtml(s)}">${escHtml(s)}</div>`).join('')
+      : '<p class="text-slate-500 text-sm col-span-full">Nothing done yet.</p>';
+
+    // Failed
+    const failEntries = Object.entries(failed);
+    document.getElementById('rq-failed').innerHTML = failEntries.length
+      ? failEntries.map(([slug, err]) => `
+          <div class="py-2 border-b border-slate-800 last:border-0">
+            <div class="text-xs font-mono text-red-400">${escHtml(slug)}</div>
+            <div class="text-xs text-slate-500 mt-0.5">${escHtml(String(err).slice(0,100))}</div>
+          </div>`).join('')
+      : '<p class="text-green-500 text-sm">No failures!</p>';
+  } catch(e) {
+    console.error('Blog queue error:', e);
+  }
+}
+
+// ============================================================
+// Blog Performance
+// ============================================================
+let perfOffset = 0;
+const perfLimit = 50;
+let perfTotal = 0;
+
+async function loadPerformance() {
+  perfOffset = 0;
+  // Load data status + articles in parallel
+  try {
+    const status = await api('/api/blog/performance-status');
+    const el = document.getElementById('perf-data-status');
+    if (status.rows === 0) {
+      el.innerHTML = `
+        <span class="dot dot-yellow"></span>
+        <span class="text-xs text-yellow-400">No data yet.</span>
+        <span class="text-xs text-slate-500">Run <code class="bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">python3 blog_automation/snapshot_performance.py --backfill</code> to fetch 6 months of GSC history.</span>`;
+    } else {
+      const kw = status.keywords || {};
+      el.innerHTML = `
+        <span class="dot dot-green"></span>
+        <span class="text-xs text-slate-300">${status.rows.toLocaleString()} page rows</span>
+        <span class="text-xs text-slate-500">${status.slugs} articles · ${status.days} days · ${status.min_date} → ${status.max_date}</span>
+        <span class="text-xs text-slate-500">·</span>
+        <span class="text-xs text-slate-300">${(kw.rows || 0).toLocaleString()} keyword rows</span>
+
+        <span class="text-xs text-slate-500">${kw.queries || 0} queries · ${kw.snapshots || 0} snapshots</span>
+        <span class="text-xs text-slate-500 ml-auto">${status.rewriteCount} rewrites tracked</span>`;
+    }
+  } catch(e) {}
+  await fetchPerfPage();
+  loadKpis(); // fire and forget
+  loadDailyChart(); // fire and forget
+}
+
+async function loadDailyChart() {
+  try {
+    const data = await api('/api/blog/daily-traffic?days=90');
+    if (!data.daily || data.daily.length < 3) return;
+    const days = data.daily;
+    const svg = document.getElementById('daily-traffic-chart');
+    if (!svg) return;
+
+    const W = 800, H = 180, padL = 45, padR = 10, padT = 10, padB = 25;
+    const chartW = W - padL - padR, chartH = H - padT - padB;
+    const n = days.length;
+
+    const maxClicks = Math.max(...days.map(d => d.clicks), 1);
+    const maxImpressions = Math.max(...days.map(d => d.impressions), 1);
+    const xStep = chartW / (n - 1);
+    const yClick = (v) => padT + chartH - (v / maxClicks) * chartH;
+    const yImp = (v) => padT + chartH - (v / maxImpressions) * chartH;
+
+    let clicksPath = '', impPath = '', clicksFill = '';
+    const rewriteMarkers = [];
+    for (let i = 0; i < n; i++) {
+      const x = padL + i * xStep;
+      const yc = yClick(days[i].clicks);
+      const yi = yImp(days[i].impressions);
+      clicksPath += (i === 0 ? 'M' : 'L') + `${x},${yc}`;
+      impPath += (i === 0 ? 'M' : 'L') + `${x},${yi}`;
+      if (days[i].rewrites > 0) {
+        rewriteMarkers.push(`<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT+chartH}" stroke="#f59e0b" stroke-width="1" opacity="0.3"/>
+          <polygon points="${x-3},${padT} ${x+3},${padT} ${x},${padT+5}" fill="#f59e0b" opacity="0.6"/>`);
+      }
+    }
+    clicksFill = clicksPath + `L${padL+(n-1)*xStep},${padT+chartH}L${padL},${padT+chartH}Z`;
+    const impFill = impPath + `L${padL+(n-1)*xStep},${padT+chartH}L${padL},${padT+chartH}Z`;
+
+    // Y-axis
+    const yLabels = [0, Math.round(maxClicks/2), maxClicks].map(v => {
+      const y = yClick(v);
+      return `<text x="${padL-5}" y="${y+3}" text-anchor="end" fill="#64748b" font-size="9">${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}</text>`;
+    });
+
+    // X-axis (every ~15 days)
+    const skip = Math.max(1, Math.floor(n / 6));
+    const xLabels = days.filter((_, i) => i % skip === 0 || i === n-1).map((d, _, arr) => {
+      const i = days.indexOf(d);
+      const x = padL + i * xStep;
+      return `<text x="${x}" y="${H-3}" text-anchor="middle" fill="#64748b" font-size="8">${d.date.slice(5)}</text>`;
+    });
+
+    svg.innerHTML = `
+      <defs>
+        <linearGradient id="dClicksGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#818cf8" stop-opacity="0.25"/><stop offset="100%" stop-color="#818cf8" stop-opacity="0.02"/>
+        </linearGradient>
+        <linearGradient id="dImpGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#34d399" stop-opacity="0.12"/><stop offset="100%" stop-color="#34d399" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
+      ${[0,.25,.5,.75,1].map(f => `<line x1="${padL}" y1="${padT+chartH*(1-f)}" x2="${W-padR}" y2="${padT+chartH*(1-f)}" stroke="#1e293b" stroke-width="0.5"/>`).join('')}
+      ${rewriteMarkers.join('')}
+      <path d="${impFill}" fill="url(#dImpGrad)"/>
+      <path d="${clicksFill}" fill="url(#dClicksGrad)"/>
+      <path d="${impPath}" fill="none" stroke="#34d399" stroke-width="1.2" opacity="0.5"/>
+      <path d="${clicksPath}" fill="none" stroke="#818cf8" stroke-width="1.5"/>
+      ${yLabels.join('')}
+      ${xLabels.join('')}
+    `;
+  } catch(e) { /* daily chart is supplementary */ }
+}
+
+async function loadKpis() {
+  try {
+    const d = await api('/api/blog/performance-kpis');
+    if (d.error) return;
+    const section = document.getElementById('kpi-section');
+    section.style.display = 'block';
+
+    const deltaSpan = (val, suffix = '') => {
+      const color = val > 0 ? 'text-green-400' : val < 0 ? 'text-red-400' : 'text-slate-500';
+      return `<span class="${color} font-semibold">${val > 0 ? '+' : ''}${val.toLocaleString()}${suffix}</span>`;
+    };
+
+    // Site traffic
+    document.getElementById('kpi-site-clicks').textContent = d.siteTraffic.recentClicks.toLocaleString();
+    document.getElementById('kpi-site-clicks-delta').innerHTML = deltaSpan(d.siteTraffic.clicksDelta);
+    document.getElementById('kpi-site-impressions').textContent = d.siteTraffic.recentImpressions.toLocaleString();
+    document.getElementById('kpi-site-imp-delta').innerHTML = deltaSpan(d.siteTraffic.impressionsDelta);
+
+    // Rewritten traffic
+    document.getElementById('kpi-rw-clicks').textContent = d.rewrittenTraffic.recentClicks.toLocaleString();
+    document.getElementById('kpi-rw-clicks-delta').innerHTML = deltaSpan(d.rewrittenTraffic.clicksDelta);
+    document.getElementById('kpi-rw-impressions').textContent = d.rewrittenTraffic.recentImpressions.toLocaleString();
+    document.getElementById('kpi-rw-imp-delta').innerHTML = deltaSpan(d.rewrittenTraffic.impressionsDelta);
+
+    // Gainers
+    const gainersEl = document.getElementById('kpi-gainers');
+    gainersEl.innerHTML = d.topGainers.length ? d.topGainers.map(g =>
+      `<div class="flex justify-between"><span class="text-slate-300 truncate mr-2" style="max-width:180px" title="${escHtml(g.slug)}">${escHtml(g.slug)}</span><span class="text-green-400 font-semibold flex-shrink-0">+${g.delta}</span></div>`
+    ).join('') : '<span class="text-slate-500">No gainers</span>';
+
+    // Losers
+    const losersEl = document.getElementById('kpi-losers');
+    losersEl.innerHTML = d.topLosers.length ? d.topLosers.map(g =>
+      `<div class="flex justify-between"><span class="text-slate-300 truncate mr-2" style="max-width:180px" title="${escHtml(g.slug)}">${escHtml(g.slug)}</span><span class="text-red-400 font-semibold flex-shrink-0">${g.delta}</span></div>`
+    ).join('') : '<span class="text-slate-500">No losers</span>';
+
+    // CTR distribution
+    const ctr = d.ctrBrackets;
+    const ctrTotal = ctr.under1 + ctr.under3 + ctr.under5 + ctr.above5;
+    const ctrPct = v => ctrTotal > 0 ? Math.round(v / ctrTotal * 100) : 0;
+    document.getElementById('kpi-ctr-dist').innerHTML = `
+      <div class="flex justify-between"><span class="text-slate-400">&lt; 1%</span><span class="text-slate-300">${ctr.under1} <span class="text-slate-500">(${ctrPct(ctr.under1)}%)</span></span></div>
+      <div class="flex justify-between"><span class="text-slate-400">1–3%</span><span class="text-slate-300">${ctr.under3} <span class="text-slate-500">(${ctrPct(ctr.under3)}%)</span></span></div>
+      <div class="flex justify-between"><span class="text-slate-400">3–5%</span><span class="text-slate-300">${ctr.under5} <span class="text-slate-500">(${ctrPct(ctr.under5)}%)</span></span></div>
+      <div class="flex justify-between"><span class="text-green-400">&gt; 5%</span><span class="text-green-300">${ctr.above5} <span class="text-slate-500">(${ctrPct(ctr.above5)}%)</span></span></div>
+      <div class="flex gap-1 h-3 rounded overflow-hidden mt-2">
+        <div class="bg-red-500" style="width:${ctrPct(ctr.under1)}%"></div>
+        <div class="bg-yellow-500" style="width:${ctrPct(ctr.under3)}%"></div>
+        <div class="bg-blue-500" style="width:${ctrPct(ctr.under5)}%"></div>
+        <div class="bg-green-500" style="width:${ctrPct(ctr.above5)}%"></div>
+      </div>`;
+
+    // New keywords + top 10 entries
+    document.getElementById('kpi-new-kw').textContent = d.newKeywords.toLocaleString();
+    document.getElementById('kpi-top10-count').textContent = d.enteredTop10.length;
+    if (d.enteredTop10.length > 0) {
+      document.getElementById('kpi-top10-list').innerHTML = d.enteredTop10.slice(0, 5).map(e =>
+        `<div class="text-slate-400">${escHtml(e.slug)} <span class="text-red-400">${e.posBefore}</span> → <span class="text-green-400">${e.posAfter}</span></div>`
+      ).join('');
+    }
+
+    // Weekly trend
+    const weeks = d.weeklyTrend;
+    document.getElementById('kpi-weekly-tbody').innerHTML = weeks.map((w, i) => {
+      const prev = i > 0 ? weeks[i - 1] : null;
+      const clicksDelta = prev ? w.clicks - prev.clicks : 0;
+      const trendIcon = !prev ? '' : clicksDelta > 0 ? '<span class="text-green-400">↑</span>' : clicksDelta < 0 ? '<span class="text-red-400">↓</span>' : '<span class="text-slate-500">→</span>';
+      const clicksColor = !prev ? '' : clicksDelta > 0 ? 'text-green-400' : clicksDelta < 0 ? 'text-red-400' : 'text-slate-500';
+      return `<tr>
+        <td class="text-slate-400">${w.week}</td>
+        <td class="text-slate-300">${w.clicks.toLocaleString()} ${prev ? `<span class="${clicksColor} text-xs">(${clicksDelta > 0 ? '+' : ''}${clicksDelta})</span>` : ''}</td>
+        <td class="text-slate-300">${w.impressions.toLocaleString()}</td>
+        <td>${trendIcon}</td>
+      </tr>`;
+    }).join('');
+
+    // Render weekly chart
+    renderWeeklyChart(weeks);
+  } catch(e) {
+    // silently fail — KPIs are supplementary
+  }
+}
+
+function renderWeeklyChart(weeks) {
+  const svg = document.getElementById('weekly-chart');
+  if (!svg || !weeks || weeks.length < 2) return;
+  const W = 600, H = 160, padL = 45, padR = 10, padT = 10, padB = 25;
+  const chartW = W - padL - padR, chartH = H - padT - padB;
+  const n = weeks.length;
+
+  const maxClicks = Math.max(...weeks.map(w => w.clicks), 1);
+  const maxImpressions = Math.max(...weeks.map(w => w.impressions), 1);
+
+  const xStep = chartW / (n - 1);
+  const yClick = (v) => padT + chartH - (v / maxClicks) * chartH;
+  const yImp = (v) => padT + chartH - (v / maxImpressions) * chartH;
+
+  // Build paths
+  let clicksPath = '', impPath = '', clicksFill = '', impFill = '';
+  const dots = [];
+  for (let i = 0; i < n; i++) {
+    const x = padL + i * xStep;
+    const yc = yClick(weeks[i].clicks);
+    const yi = yImp(weeks[i].impressions);
+    clicksPath += (i === 0 ? 'M' : 'L') + `${x},${yc}`;
+    impPath += (i === 0 ? 'M' : 'L') + `${x},${yi}`;
+    dots.push({ x, yc, yi, week: weeks[i] });
+  }
+  // Fill area under clicks
+  clicksFill = clicksPath + `L${padL + (n-1)*xStep},${padT+chartH}L${padL},${padT+chartH}Z`;
+  impFill = impPath + `L${padL + (n-1)*xStep},${padT+chartH}L${padL},${padT+chartH}Z`;
+
+  // Y-axis labels
+  const yLabels = [0, Math.round(maxClicks/2), maxClicks].map(v => {
+    const y = yClick(v);
+    return `<text x="${padL-5}" y="${y+3}" text-anchor="end" fill="#64748b" font-size="9">${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}</text>`;
+  });
+
+  // X-axis labels (show every other week if many)
+  const skip = n > 10 ? 2 : 1;
+  const xLabels = dots.filter((_, i) => i % skip === 0 || i === n-1).map(d =>
+    `<text x="${d.x}" y="${H-3}" text-anchor="middle" fill="#64748b" font-size="8">${d.week.week.slice(5)}</text>`
+  );
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="clicksGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#818cf8" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="#818cf8" stop-opacity="0.02"/>
+      </linearGradient>
+      <linearGradient id="impGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#34d399" stop-opacity="0.15"/>
+        <stop offset="100%" stop-color="#34d399" stop-opacity="0.02"/>
+      </linearGradient>
+    </defs>
+    <!-- Grid lines -->
+    ${[0, 0.25, 0.5, 0.75, 1].map(f => {
+      const y = padT + chartH * (1-f);
+      return `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#1e293b" stroke-width="0.5"/>`;
+    }).join('')}
+    <!-- Fills -->
+    <path d="${impFill}" fill="url(#impGrad)"/>
+    <path d="${clicksFill}" fill="url(#clicksGrad)"/>
+    <!-- Lines -->
+    <path d="${impPath}" fill="none" stroke="#34d399" stroke-width="1.5" opacity="0.6"/>
+    <path d="${clicksPath}" fill="none" stroke="#818cf8" stroke-width="2"/>
+    <!-- Dots -->
+    ${dots.map(d => `<circle cx="${d.x}" cy="${d.yc}" r="3" fill="#818cf8"/>`).join('')}
+    <!-- Labels -->
+    ${yLabels.join('')}
+    ${xLabels.join('')}
+  `;
+}
+
+async function fetchPerfPage() {
+  const period = document.getElementById('perf-period').value;
+  const params = new URLSearchParams({ period, limit: perfLimit, offset: perfOffset });
+  const tbody = document.getElementById('perf-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="text-center text-slate-500 py-4">Loading…</td></tr>';
+  try {
+    const data = await api('/api/blog/article-performance?' + params);
+    perfTotal = data.total;
+
+    const s = data.summary;
+
+    // Trend cards
+    document.getElementById('perf-improved').textContent = s.improved;
+    document.getElementById('perf-declining').textContent = s.declining;
+    document.getElementById('perf-flat').textContent = s.flat;
+
+    const delta = s.avgClicksDelta;
+    const deltaEl = document.getElementById('perf-avg-delta');
+    deltaEl.textContent = (delta > 0 ? '+' : '') + delta;
+    deltaEl.className = 'stat-value text-2xl ' + (delta > 0 ? 'text-green-400' : delta < 0 ? 'text-red-400' : 'text-slate-400');
+
+    // Position cards
+    const posDelta = s.avgPosDelta || 0;
+    const posDeltaEl = document.getElementById('perf-avg-pos-delta');
+    posDeltaEl.textContent = (posDelta > 0 ? '+' : '') + posDelta.toFixed(1);
+    posDeltaEl.className = 'stat-value text-2xl ' + (posDelta > 0 ? 'text-green-400' : posDelta < 0 ? 'text-red-400' : 'text-slate-400');
+    document.getElementById('perf-pos-up').textContent = s.posImproved || 0;
+    document.getElementById('perf-pos-down').textContent = s.posDrop || 0;
+
+    // Position bracket bar
+    const b = s.posBrackets || {};
+    const bTotal = (b.top3 || 0) + (b.top10 || 0) + (b.top20 || 0) + (b.beyond || 0);
+    if (bTotal > 0) {
+      const pct = v => (v / bTotal * 100).toFixed(1) + '%';
+      const bars = document.getElementById('perf-bracket-bar').children;
+      bars[0].style.width = pct(b.top3 || 0);
+      bars[1].style.width = pct(b.top10 || 0);
+      bars[2].style.width = pct(b.top20 || 0);
+      bars[3].style.width = pct(b.beyond || 0);
+      document.getElementById('perf-bracket-labels').innerHTML = `
+        <span class="text-green-400">1-3: <b>${b.top3 || 0}</b></span>
+        <span class="text-blue-400">4-10: <b>${b.top10 || 0}</b></span>
+        <span class="text-yellow-400">11-20: <b>${b.top20 || 0}</b></span>
+        <span class="text-red-400">20+: <b>${b.beyond || 0}</b></span>`;
+    }
+
+    // Pagination
+    document.getElementById('perf-count').textContent =
+      perfTotal > 0 ? `${perfOffset+1}–${Math.min(perfOffset+perfLimit, perfTotal)} of ${perfTotal}` : '0 articles';
+    document.getElementById('perf-prev-btn').disabled = perfOffset === 0;
+    document.getElementById('perf-next-btn').disabled = perfOffset + perfLimit >= perfTotal;
+
+    if (!data.articles.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-slate-500 py-8">No rewritten articles with performance data yet. Run snapshot_performance.py to collect data.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.articles.map(a => {
+      const trendIcon = a.trend === 'up' ? '<span class="text-green-400 font-bold">↑</span>'
+        : a.trend === 'down' ? '<span class="text-red-400 font-bold">↓</span>'
+        : '<span class="text-slate-500">→</span>';
+      const trendBg = a.trend === 'up' ? 'background:rgba(34,197,94,0.04)' : a.trend === 'down' ? 'background:rgba(239,68,68,0.04)' : '';
+
+      // Position rendering
+      const posB = a.posBefore !== null ? a.posBefore.toFixed(1) : '—';
+      const posA = a.posAfter !== null ? a.posAfter.toFixed(1) : '—';
+      const posD = a.posDelta;
+      const posColor = posD !== null ? (posD > 0.5 ? 'text-green-400' : posD < -0.5 ? 'text-red-400' : 'text-slate-500') : 'text-slate-600';
+
+      const posBadge = posD !== null ? `<span class="${posColor} text-xs font-semibold ml-1">(${posD > 0 ? '+' : ''}${posD.toFixed(1)})</span>` : '';
+      // Position color for the "after" value
+      const posAfterColor = a.posAfter !== null ? (a.posAfter <= 3 ? 'text-green-400' : a.posAfter <= 10 ? 'text-blue-400' : a.posAfter <= 20 ? 'text-yellow-400' : 'text-red-400') : 'text-slate-600';
+
+      const clicksDelta = a.clicksAfter - a.clicksBefore;
+      const clicksColor = clicksDelta > 0 ? 'text-green-400' : clicksDelta < 0 ? 'text-red-400' : 'text-slate-500';
+
+      return `<tr style="${trendBg};cursor:pointer" onclick="loadArticleKeywords('${escHtml(a.slug)}')" title="Click to see keywords">
+        <td class="text-xs font-mono text-slate-300">${escHtml(a.slug)}</td>
+        <td class="text-xs text-slate-400">${a.rewrittenAt ? a.rewrittenAt.slice(0,10) : '—'}</td>
+        <td class="text-xs">
+          <span class="text-slate-500">${posB}</span>
+          <span class="text-slate-600 mx-1">→</span>
+          <span class="${posAfterColor} font-semibold">${posA}</span>
+          ${posBadge}
+        </td>
+        <td class="text-xs">
+          <span class="text-slate-500">${a.clicksBefore}</span>
+          <span class="text-slate-600 mx-1">→</span>
+          <span class="${clicksColor}">${a.clicksAfter}</span>
+        </td>
+        <td class="text-xs">
+          <span class="text-slate-500">${a.impressionsBefore.toLocaleString()}</span>
+          <span class="text-slate-600 mx-1">→</span>
+          <span class="text-slate-300">${a.impressionsAfter.toLocaleString()}</span>
+        </td>
+        <td class="text-center">${trendIcon}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-red-400 py-4">${escHtml(String(e))}</td></tr>`;
+  }
+}
+function perfPrev() { if (perfOffset > 0) { perfOffset -= perfLimit; fetchPerfPage(); } }
+function perfNext() { if (perfOffset + perfLimit < perfTotal) { perfOffset += perfLimit; fetchPerfPage(); } }
+
+async function loadArticleKeywords(slug) {
+  const panel = document.getElementById('kw-panel');
+  panel.style.display = 'block';
+  document.getElementById('kw-title').textContent = slug;
+  document.getElementById('kw-subtitle').textContent = 'Loading keywords...';
+  document.getElementById('kw-summary').innerHTML = '';
+  document.getElementById('kw-tbody').innerHTML = '<tr><td colspan="8" class="text-center text-slate-500 py-4">Loading…</td></tr>';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  try {
+    const data = await api('/api/blog/article-keywords?slug=' + encodeURIComponent(slug));
+
+    // Subtitle
+    let sub = '';
+    if (data.rewriteDate) sub += `Rewritten: ${data.rewriteDate.slice(0,10)}`;
+    if (data.beforePeriod) sub += ` · Comparing: ${data.beforePeriod} vs ${data.latestPeriod}`;
+    else sub += ` · Latest: ${data.latestPeriod || 'no data'}`;
+    document.getElementById('kw-subtitle').textContent = sub;
+
+    // Summary badges
+    const s = data.summary || {};
+    document.getElementById('kw-summary').innerHTML = `
+      <span class="badge badge-green">${s.improved || 0} improved</span>
+      <span class="badge badge-red">${s.declining || 0} declining</span>
+      <span class="badge badge-blue">${s.new || 0} new</span>
+      ${s.lost ? `<span class="badge badge-gray">${s.lost} lost</span>` : ''}
+      <span class="badge badge-gray">${s.total || 0} total</span>`;
+
+    if (!data.keywords || !data.keywords.length) {
+      document.getElementById('kw-tbody').innerHTML = '<tr><td colspan="8" class="text-center text-slate-500 py-4">No keyword data. Run snapshot_performance.py --backfill-kw</td></tr>';
+      return;
+    }
+
+    document.getElementById('kw-tbody').innerHTML = data.keywords.map(k => {
+      const trendIcon = k.trend === 'up' ? '<span class="text-green-400">↑</span>'
+        : k.trend === 'down' ? '<span class="text-red-400">↓</span>'
+        : k.trend === 'new' ? '<span class="text-blue-400">new</span>'
+        : k.trend === 'lost' ? '<span class="text-red-400">lost</span>'
+        : '<span class="text-slate-600">→</span>';
+      const rowBg = k.trend === 'up' ? 'background:rgba(34,197,94,0.04)' : k.trend === 'down' || k.trend === 'lost' ? 'background:rgba(239,68,68,0.04)' : '';
+
+      const impDelta = k.impDelta !== null ? `<span class="${k.impDelta > 0 ? 'text-green-400' : k.impDelta < 0 ? 'text-red-400' : 'text-slate-500'}">${k.impDelta > 0 ? '+' : ''}${k.impDelta}</span>` : '<span class="text-slate-600">—</span>';
+      const posDelta = k.posDelta !== null ? `<span class="${k.posDelta > 0 ? 'text-green-400' : k.posDelta < 0 ? 'text-red-400' : 'text-slate-500'}">${k.posDelta > 0 ? '+' : ''}${k.posDelta.toFixed(1)}</span>` : '<span class="text-slate-600">—</span>';
+
+      return `<tr style="${rowBg}">
+        <td class="text-xs text-slate-300" style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(k.query)}">${escHtml(k.query)}</td>
+        <td class="text-xs text-slate-400">${k.impressions.toLocaleString()}${k.impressionsBefore !== null ? ` <span class="text-slate-600">(was ${k.impressionsBefore.toLocaleString()})</span>` : ''}</td>
+        <td class="text-xs text-slate-400">${k.clicks}${k.clicksBefore !== null ? ` <span class="text-slate-600">(${k.clicksBefore})</span>` : ''}</td>
+        <td class="text-xs text-slate-400">${k.ctr}%</td>
+        <td class="text-xs text-slate-400">${k.position > 0 ? k.position.toFixed(1) : '—'}${k.positionBefore !== null ? ` <span class="text-slate-600">(${k.positionBefore.toFixed(1)})</span>` : ''}</td>
+        <td class="text-xs">${impDelta}</td>
+        <td class="text-xs">${posDelta}</td>
+        <td class="text-center">${trendIcon}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('kw-tbody').innerHTML = `<tr><td colspan="8" class="text-center text-red-400 py-4">${escHtml(String(e))}</td></tr>`;
+  }
+}
+
+// ============================================================
+// Blog Agents
+// ============================================================
+const AGENT_DESCRIPTIONS = {
+  orchestrator: 'Main pipeline coordinator — sequences all agents from research to publish',
+  writer: 'Claude Opus 4.6 — generates full SEO articles with GEO optimization',
+  image_creator: 'DALL-E 3 — creates branded WebP featured & inline images',
+  seo_auditor: 'Claude — runs 22-point SEO + GEO + E-E-A-T quality check per article',
+  researcher: 'DuckDuckGo + Claude — competitive analysis and keyword gap research',
+  publisher: 'GitHub Trees API — commits articles and images, triggers deploy webhook',
+  scheduler: 'Cron runner — processes 199 article queue across 5 priority phases',
+  article_updater: 'Full rewrite pipeline — GSC keywords → research → write → images → push',
+  rewrite_queue: 'Resumable rewrite worker — progress tracked in rewrite_progress.json',
+  batch_audit: 'Bulk audit runner — fetches all published articles and scores them',
+  complete_articles: 'Fix runner — targets failing audits and old pipeline articles',
+  analytics_agent: 'GSC analysis — finds quick wins, CTR fixes, keyword gaps',
+  weekly_report: 'Weekly Slack report — 28-day GSC performance summary',
+  snapshot_performance: 'Daily GSC snapshot — stores clicks/impressions in SQLite for trend tracking',
+};
+
+let agentEditorOpen = null;
+
+async function loadBlogAgents() {
+  try {
+    const data = await api('/api/blog/agents');
+    const grid = document.getElementById('blog-agents-grid');
+    if (!data.agents.length) {
+      grid.innerHTML = '<p class="text-slate-500">No agent scripts found.</p>';
+      return;
+    }
+    grid.innerHTML = data.agents.map(a => `
+      <div class="card cursor-pointer hover:border-indigo-500 transition-colors" onclick="openAgentSource('${escHtml(a.script)}', '${escHtml(a.name)}')">
+        <div class="flex items-start gap-2 mb-2">
+          <span class="text-xl mt-0.5">${agentIcon(a.name)}</span>
+          <div>
+            <div class="font-medium text-slate-200 text-sm">${escHtml(a.name)}</div>
+            <div class="text-xs text-slate-500">${escHtml(a.script)}</div>
+          </div>
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">${escHtml(AGENT_DESCRIPTIONS[a.name] || '')}</p>
+        <div class="mt-2 flex items-center justify-between">
+          <span class="text-xs text-slate-600">Modified: ${fmtTime(a.lastModified)}</span>
+          <span class="text-xs text-indigo-400">View source →</span>
+        </div>
+      </div>`).join('');
+  } catch(e) { console.error('Blog agents error:', e); }
+}
+
+async function openAgentSource(script, name) {
+  // Create or show the editor panel
+  let panel = document.getElementById('agent-source-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'agent-source-panel';
+    panel.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:50;display:flex;align-items:center;justify-content:center;';
+    panel.onclick = (e) => { if (e.target === panel) closeAgentSource(); };
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'flex';
+  panel.innerHTML = `
+    <div style="width:90%;max-width:900px;max-height:90vh;display:flex;flex-direction:column;background:#0f172a;border:1px solid #334155;border-radius:12px;overflow:hidden;">
+      <div style="padding:12px 16px;border-bottom:1px solid #334155;display:flex;align-items:center;justify-content:between;gap:12px;flex-shrink:0;">
+        <span class="text-xl">${agentIcon(name)}</span>
+        <div style="flex:1;min-width:0;">
+          <div class="font-semibold text-slate-200 text-sm">${escHtml(name)}</div>
+          <div class="text-xs text-slate-500">${escHtml(script)}</div>
+        </div>
+        <span class="text-xs text-slate-500" id="agent-src-lines"></span>
+        <button class="btn btn-primary btn-sm" id="agent-save-btn" onclick="saveAgentSource()" style="display:none">Save</button>
+        <button class="btn btn-sm" style="background:#334155;color:#94a3b8;" onclick="toggleAgentEdit()">Edit</button>
+        <button class="btn btn-sm" style="background:#334155;color:#94a3b8;" onclick="closeAgentSource()">Close</button>
+      </div>
+      <div id="agent-src-view" style="flex:1;overflow:auto;padding:16px;">
+        <div class="text-slate-500 text-sm">Loading...</div>
+      </div>
+    </div>`;
+
+  agentEditorOpen = script;
+  try {
+    const data = await api('/api/blog/agent-source?script=' + encodeURIComponent(script));
+    document.getElementById('agent-src-lines').textContent = data.lines + ' lines';
+    const viewEl = document.getElementById('agent-src-view');
+    viewEl.innerHTML = `<pre style="margin:0;font-family:'Fira Mono',ui-monospace,monospace;font-size:12px;line-height:1.6;color:#cbd5e1;white-space:pre-wrap;word-break:break-word;">${escHtml(data.content)}</pre>`;
+    viewEl.dataset.content = data.content;
+    viewEl.dataset.script = script;
+  } catch(e) {
+    document.getElementById('agent-src-view').innerHTML = `<p class="text-red-400 text-sm">${escHtml(String(e))}</p>`;
+  }
+}
+
+function toggleAgentEdit() {
+  const viewEl = document.getElementById('agent-src-view');
+  const saveBtn = document.getElementById('agent-save-btn');
+  const existing = viewEl.querySelector('textarea');
+  if (existing) {
+    // Switch back to view mode
+    viewEl.innerHTML = `<pre style="margin:0;font-family:'Fira Mono',ui-monospace,monospace;font-size:12px;line-height:1.6;color:#cbd5e1;white-space:pre-wrap;word-break:break-word;">${escHtml(existing.value)}</pre>`;
+    viewEl.dataset.content = existing.value;
+    saveBtn.style.display = 'none';
+    return;
+  }
+  const content = viewEl.dataset.content || '';
+  viewEl.innerHTML = `<textarea style="width:100%;height:100%;min-height:400px;background:#0a0f1a;color:#cbd5e1;border:1px solid #334155;border-radius:6px;padding:12px;font-family:'Fira Mono',ui-monospace,monospace;font-size:12px;line-height:1.6;resize:none;outline:none;" spellcheck="false">${escHtml(content)}</textarea>`;
+  viewEl.querySelector('textarea').focus();
+  saveBtn.style.display = '';
+}
+
+async function saveAgentSource() {
+  const viewEl = document.getElementById('agent-src-view');
+  const textarea = viewEl.querySelector('textarea');
+  const script = viewEl.dataset.script;
+  if (!textarea || !script) return;
+
+  const saveBtn = document.getElementById('agent-save-btn');
+  saveBtn.textContent = 'Saving...';
+  saveBtn.disabled = true;
+
+  try {
+    const resp = await fetch('/api/blog/agent-source?script=' + encodeURIComponent(script), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ content: textarea.value }),
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    saveBtn.textContent = 'Saved!';
+    document.getElementById('agent-src-lines').textContent = data.lines + ' lines';
+    viewEl.dataset.content = textarea.value;
+    setTimeout(() => { saveBtn.textContent = 'Save'; saveBtn.disabled = false; }, 1500);
+  } catch(e) {
+    saveBtn.textContent = 'Error!';
+    saveBtn.disabled = false;
+    setTimeout(() => { saveBtn.textContent = 'Save'; }, 2000);
+  }
+}
+
+function closeAgentSource() {
+  const panel = document.getElementById('agent-source-panel');
+  if (panel) panel.style.display = 'none';
+  agentEditorOpen = null;
+}
+
+function agentIcon(name) {
+  const icons = {
+    orchestrator: '🎯', writer: '✍️', image_creator: '🎨',
+    seo_auditor: '🔍', researcher: '🔬', publisher: '🚀',
+    scheduler: '⏰', article_updater: '🔄', rewrite_queue: '📋',
+    batch_audit: '📊', complete_articles: '🔧', analytics_agent: '📈',
+    weekly_report: '📰', notifier: '🔔', snapshot_performance: '📸',
+  };
+  return icons[name] || '⚡';
+}
+
+// ============================================================
+// Affiliate Analytics
+// ============================================================
+let affData = null;
+
+async function loadAffiliates() {
+  // Show loading state
+  ['aff-total-links','aff-month-clicks','aff-month-human','aff-prev-clicks','aff-change'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<span class="loading-spinner"></span>';
+  });
+  document.getElementById('aff-table-body').innerHTML =
+    '<tr><td colspan="6" class="py-4 text-slate-500"><span class="loading-spinner"></span>Loading affiliate data…</td></tr>';
+
+  try {
+    const data = await api('/api/blog/affiliates');
+    if (data.loading) {
+      // DB empty — background fetch triggered, poll until ready
+      document.getElementById('aff-table-body').innerHTML =
+        '<tr><td colspan="6" class="py-4 text-slate-400"><span class="loading-spinner"></span> Fetching from Short.io in background — will refresh in ~30s…</td></tr>';
+      ['aff-total-links','aff-month-clicks','aff-month-human','aff-prev-clicks','aff-change'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.textContent = '—';
+      });
+      setTimeout(() => { if (currentSection === 'blog-affiliates') loadAffiliates(); }, 30000);
+      return;
+    }
+    populateAffData(data);
+  } catch(e) {
+    console.error('Affiliates error:', e);
+    document.getElementById('aff-table-body').innerHTML =
+      `<tr><td colspan="6" class="py-4 text-red-400">${escHtml(String(e))}</td></tr>`;
+  }
+}
+
+function populateAffData(data) {
+    affData = data;
+
+    // Snapshot info
+    const infoEl = document.getElementById('aff-snapshot-info');
+    if (data.snapshotDate) {
+      const label = data.fromCache ? 'Loaded from local snapshot' : 'Freshly fetched from Short.io';
+      infoEl.textContent = `${label} — ${data.snapshotDate}`;
+    } else {
+      infoEl.textContent = '';
+    }
+
+    // Domain stats
+    document.getElementById('aff-total-links').textContent = data.domain.totalLinks;
+    document.getElementById('aff-month-clicks').textContent = data.domain.monthClicks.toLocaleString();
+    document.getElementById('aff-month-human').textContent = data.domain.monthHuman.toLocaleString();
+    document.getElementById('aff-prev-clicks').textContent = data.domain.prevMonthHuman.toLocaleString();
+
+
+    const change = data.domain.prevMonthHuman > 0
+      ? (((data.domain.monthHuman - data.domain.prevMonthHuman) / data.domain.prevMonthHuman) * 100).toFixed(1)
+      : '0';
+    const changeEl = document.getElementById('aff-change');
+    changeEl.textContent = (change >= 0 ? '+' : '') + change + '%';
+    changeEl.className = 'stat-value ' + (change >= 0 ? 'text-green-400' : 'text-red-400');
+
+    // Wire up controls
+    document.getElementById('aff-search').oninput = debounce(renderAffTable, 200);
+    document.getElementById('aff-sort').onchange = renderAffTable;
+    document.getElementById('aff-hide-zero').onchange = renderAffTable;
+
+    renderAffTable();
+}
+
+async function refreshAffiliates() {
+  const btn = document.getElementById('aff-refresh-btn');
+  btn.disabled = true;
+  btn.textContent = 'Refreshing…';
+  btn.style.opacity = '0.5';
+  try {
+    const data = await api('/api/blog/affiliates/refresh');
+    if (data.error) throw data.error;
+    if (data.status === 'already_refreshing') {
+      btn.textContent = 'Already refreshing…';
+      setTimeout(() => { btn.textContent = 'Refresh from Short.io'; btn.disabled = false; btn.style.opacity = '1'; }, 3000);
+      return;
+    }
+    populateAffData(data);
+  } catch(e) {
+    console.error('Refresh error:', e);
+  }
+  btn.textContent = 'Refresh from Short.io';
+  btn.disabled = false;
+  btn.style.opacity = '1';
+}
+
+function renderAffTable() {
+  if (!affData) return;
+  const search = document.getElementById('aff-search').value.toLowerCase();
+  const sortBy = document.getElementById('aff-sort').value;
+  const hideZero = document.getElementById('aff-hide-zero').checked;
+
+  let links = affData.links.filter(l => {
+    if (hideZero && l.humanClicks === 0 && l.totalClicks === 0) return false;
+    if (search && !l.path.toLowerCase().includes(search) && !(l.title || '').toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  links.sort((a, b) => {
+    if (sortBy === 'path') return a.path.localeCompare(b.path);
+    if (sortBy === 'pages') return b.pages.length - a.pages.length;
+    return (b[sortBy] || 0) - (a[sortBy] || 0);
+  });
+
+  const tbody = document.getElementById('aff-table-body');
+  if (!links.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="py-4 text-slate-500">No links found</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = links.map(l => {
+    const pagesHtml = l.pages.length
+      ? l.pages.slice(0, 3).map(p =>
+          `<a href="https://unabhaengiger-finanzberater.de/${p}" target="_blank" class="text-indigo-400 hover:text-indigo-300">${escHtml(p)}</a>`
+        ).join(', ') + (l.pages.length > 3 ? ` <span class="text-slate-500">+${l.pages.length - 3} more</span>` : '')
+      : '<span class="text-slate-600">no pages</span>';
+
+    const barWidth = affData.links[0]?.humanClicks > 0
+      ? Math.max(2, (l.humanClicks / affData.links[0].humanClicks) * 100)
+      : 0;
+
+    return `<tr class="border-b border-slate-800 hover:bg-slate-800/50">
+      <td class="py-2 pr-4">
+        <div class="font-medium text-slate-200">${escHtml(l.path)}</div>
+        <div class="text-xs text-slate-500 truncate max-w-xs" title="${escHtml(l.originalURL)}">${escHtml(l.originalURL || '')}</div>
+        <div class="mt-1 h-1 rounded-full bg-slate-800" style="width:120px">
+          <div class="h-1 rounded-full bg-indigo-500" style="width:${barWidth}%"></div>
+        </div>
+      </td>
+      <td class="py-2 pr-4 text-right font-mono ${l.humanClicks > 0 ? 'text-green-400' : 'text-slate-600'}">${l.humanClicks.toLocaleString()}</td>
+      <td class="py-2 pr-4 text-right font-mono text-slate-400">${l.totalClicks.toLocaleString()}</td>
+      <td class="py-2 pr-4 text-right font-mono ${l.monthHuman > 0 ? 'text-blue-400' : 'text-slate-600'}">${l.monthHuman.toLocaleString()}</td>
+      <td class="py-2 pr-4 text-right font-mono text-slate-400">${l.monthClicks.toLocaleString()}</td>
+      <td class="py-2 text-xs">${pagesHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// Link Graph
+// ============================================================
+let lgGraph = null;
+let lgData = null;
+let lgHighlightMode = 'all';
+let lgSelectedNode = null;
+let wpsPage = 1;
+const WPS_PAGE_SIZE = 50;
+
+function getDashboardWriteToken() {
+  return localStorage.getItem('dashboardWriteToken') || '';
+}
+
+async function postWithWriteAuth(path, options = {}) {
+  const token = getDashboardWriteToken();
+  const headers = { ...(options.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  let res = await fetch(path, { ...options, headers, credentials: 'same-origin' });
+  if (res.status === 401 && !token) {
+    const entered = window.prompt('Dashboard write token required. Paste DASHBOARD_WRITE_TOKEN:');
+    if (entered && entered.trim()) {
+      localStorage.setItem('dashboardWriteToken', entered.trim());
+      headers.Authorization = `Bearer ${entered.trim()}`;
+      res = await fetch(path, { ...options, headers, credentials: 'same-origin' });
+    }
+  }
+  return res;
+}
+
+const LG_COLORS = [
+  '#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6',
+  '#8b5cf6','#ef4444','#14b8a6','#f97316','#06b6d4'
+];
+let lgCatColors = {};
+
+function lgCatColor(cat) {
+  if (!lgCatColors[cat]) {
+    const idx = Object.keys(lgCatColors).length % LG_COLORS.length;
+    lgCatColors[cat] = LG_COLORS[idx];
+  }
+  return lgCatColors[cat];
+}
+
+async function loadLinkGraph() {
+  try {
+    const [wpGraph, wpSyncState] = await Promise.all([
+      api('/api/blog/wp-link-graph'),
+      api('/api/blog/wp-sync/state'),
+    ]);
+    const data = lgNormalizeWpGraph(wpGraph, wpSyncState);
+    lgData = data;
+
+    // Last updated timestamp
+    const lgUpdatedEl = document.getElementById('lg-last-updated');
+    if (lgUpdatedEl) {
+      lgUpdatedEl.textContent = data.lastUpdated
+        ? `Graph last updated after WordPress sync: ${new Date(data.lastUpdated).toLocaleString()}`
+        : 'Run WordPress Sync to generate and refresh this graph.';
+    }
+
+    // Stats
+    document.getElementById('lg-total').textContent = data.stats.totalNodes;
+    document.getElementById('lg-links').textContent = data.stats.totalLinks;
+    document.getElementById('lg-orphans').textContent = data.stats.orphanNodes;
+    document.getElementById('lg-avg').textContent = data.stats.avgLinksPerNode;
+
+    // Category dropdown — only from article nodes (category nodes have id === category)
+    const cats = [...new Set(data.nodes.filter(n => !n.isCategory).map(n => n.category))].sort();
+    const sel = document.getElementById('lg-category');
+    sel.innerHTML = '<option value="">All Categories</option>' + cats.map(c =>
+      `<option value="${escHtml(c)}">${escHtml(c.replace(/-/g, ' '))}</option>`
+    ).join('');
+    sel.onchange = () => lgApplyFilters();
+
+    // Search
+    document.getElementById('lg-search').oninput = debounce(() => lgApplyFilters(), 200);
+
+    // Build neighbor maps for quick lookup
+    lgData._outMap = {};
+    lgData._inMap = {};
+    data.nodes.forEach(n => { lgData._outMap[n.id] = []; lgData._inMap[n.id] = []; });
+    data.links.forEach(l => {
+      lgData._outMap[l.source]?.push(l.target);
+      lgData._inMap[l.target]?.push(l.source);
+    });
+
+    // Category legend
+    const legendEl = document.getElementById('lg-cat-legend');
+    if (legendEl) {
+      legendEl.innerHTML = cats.map(c => {
+        const col = lgCatColor(c);
+        return `<span class="flex items-center gap-1 text-xs" style="color:${col}">
+          <span style="display:inline-block;width:10px;height:10px;background:${col};border-radius:2px"></span>
+          ${escHtml(c.replace(/-/g,' '))}
+        </span>`;
+      }).join('');
+    }
+
+    // Category coverage panel
+    lgBuildCoveragepanel(data.categoryCoverage);
+    lgBuildPillarPanel(data.pillarCoverage);
+
+    // Linking opportunities
+    lgBuildOpportunities();
+
+    // Render graph
+    lgRenderGraph();
+  } catch(e) {
+    console.error('Link graph error:', e);
+    document.getElementById('lg-graph').innerHTML = `<p class="text-red-400 p-4">${escHtml(String(e))}</p>`;
+  }
+}
+
+function lgNormalizeWpGraph(raw, syncState) {
+  const nodes = Array.isArray(raw?.nodes) ? raw.nodes : [];
+  const edges = Array.isArray(raw?.edges) ? raw.edges : [];
+  const apiBase = String(syncState?.siteUrl || '');
+  const siteBase = apiBase.includes('/wp-json/')
+    ? apiBase.split('/wp-json/')[0].replace(/\/+$/, '')
+    : apiBase.replace(/\/+$/, '');
+  const outMap = {};
+  const inMap = {};
+  const normalizedNodes = nodes.map(n => ({
+    id: String(n.id),
+    slug: String(n.slug || ''),
+    title: String(n.label || n.slug || n.id || ''),
+    url: String(
+      n.url ||
+        (siteBase && n.slug
+          ? `${siteBase}/${String(n.slug).replace(/^\/+|\/+$/g, '')}/`
+          : ''),
+    ),
+    category: String(n.category || 'uncategorized'),
+    type: String(n.type || 'post'),
+    status: String(n.status || 'unknown'),
+    isCategory: false,
+    inbound: 0,
+    outbound: 0,
+  }));
+  const byId = new Map(normalizedNodes.map(n => [n.id, n]));
+  const normalizedLinks = [];
+
+  normalizedNodes.forEach(n => {
+    outMap[n.id] = [];
+    inMap[n.id] = [];
+  });
+  for (const e of edges) {
+    const source = String(typeof e.source === 'object' ? e.source?.id : e.source || '');
+    const target = String(typeof e.target === 'object' ? e.target?.id : e.target || '');
+    if (!source || !target || !byId.has(source) || !byId.has(target)) continue;
+    normalizedLinks.push({ source, target, url: String(e.url || '') });
+    outMap[source].push(target);
+    inMap[target].push(source);
+  }
+  normalizedNodes.forEach(n => {
+    n.outbound = outMap[n.id].length;
+    n.inbound = inMap[n.id].length;
+  });
+
+  const orphanNodes = normalizedNodes.filter(n => n.inbound === 0 && n.outbound === 0).length;
+  const avgLinksPerNode = normalizedNodes.length
+    ? (normalizedLinks.length / normalizedNodes.length).toFixed(1)
+    : '0.0';
+
+  const categoryCoverage = {};
+  for (const n of normalizedNodes) {
+    if (!categoryCoverage[n.category]) {
+      categoryCoverage[n.category] = { total: 0, linked: 0, unlinked: [] };
+    }
+    categoryCoverage[n.category].total += 1;
+    if (n.inbound + n.outbound > 0) {
+      categoryCoverage[n.category].linked += 1;
+    } else {
+      categoryCoverage[n.category].unlinked.push({ slug: n.slug, title: n.title });
+    }
+  }
+
+  const finishedAt = syncState?.latestRun?.finished_at || null;
+  return {
+    nodes: normalizedNodes,
+    links: normalizedLinks,
+    stats: {
+      totalNodes: normalizedNodes.length,
+      totalLinks: normalizedLinks.length,
+      orphanNodes,
+      avgLinksPerNode,
+    },
+    lastUpdated: finishedAt,
+    categoryCoverage,
+    pillarCoverage: {},
+    _outMap: outMap,
+    _inMap: inMap,
+  };
+}
+
+function lgRenderGraph() {
+  const container = document.getElementById('lg-graph');
+  container.innerHTML = '';
+  lgSelectedNode = null;
+  document.getElementById('lg-detail').classList.add('hidden');
+
+  const gd = { nodes: lgData.nodes.map(n => ({...n})), links: lgData.links.map(l => ({...l})) };
+
+  lgGraph = ForceGraph()(container)
+    .graphData(gd)
+    .nodeId('id')
+    .linkSource('source')
+    .linkTarget('target')
+    .backgroundColor('#1e293b')
+    .nodeRelSize(4)
+    .nodeVal(n => n.isCategory ? Math.max(4, n.outbound * 0.5) : Math.max(1, (n.inbound + n.outbound) * 0.5))
+    .nodeColor(n => {
+      if (n.isCategory) return lgCatColor(n.category); // handled by canvas, but needed for hover
+      if (lgHighlightMode === 'orphans' && n.inbound === 0 && n.outbound === 0) return '#ef4444';
+      if (lgHighlightMode === 'no-inbound' && n.inbound === 0) return '#f59e0b';
+      if (lgHighlightMode === 'no-outbound' && n.outbound === 0) return '#f97316';
+      return lgCatColor(n.category);
+    })
+    .nodeCanvasObjectMode(n => {
+      if (n.isCategory) return 'replace';   // replace circle entirely with diamond
+      if (n.inbound === 0 && n.outbound === 0) return 'after'; // red ring overlay on orphan circles
+      return undefined;
+    })
+    .nodeCanvasObject((n, ctx, globalScale) => {
+      if (n.isCategory) {
+        // Diamond — size based on article count (inbound = number of articles in this category)
+        const size = Math.max(8, Math.sqrt(n.inbound) * 5);
+        const col = lgHighlightMode === 'categories' ? lgCatColor(n.category)
+                  : lgHighlightMode === 'orphans' ? (n.inbound === 0 ? '#ef4444' : lgCatColor(n.category))
+                  : lgHighlightMode === 'no-inbound' ? (n.inbound === 0 ? '#f59e0b' : lgCatColor(n.category))
+                  : lgHighlightMode === 'no-outbound' ? (n.outbound === 0 ? '#f97316' : lgCatColor(n.category))
+                  : lgCatColor(n.category);
+        ctx.beginPath();
+        ctx.moveTo(n.x, n.y - size);
+        ctx.lineTo(n.x + size, n.y);
+        ctx.lineTo(n.x, n.y + size);
+        ctx.lineTo(n.x - size, n.y);
+        ctx.closePath();
+        ctx.fillStyle = col;
+        ctx.fill();
+        ctx.strokeStyle = '#f1f5f9';
+        ctx.lineWidth = 2 / globalScale;
+        ctx.stroke();
+        // Label category name if zoomed in enough
+        if (globalScale > 0.6) {
+          ctx.font = `${Math.max(8, 10 / globalScale)}px sans-serif`;
+          ctx.fillStyle = '#f1f5f9';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(n.title.length > 18 ? n.title.slice(0, 16) + '…' : n.title, n.x, n.y + size + 8 / globalScale);
+        }
+      } else if (n.inbound === 0 && n.outbound === 0) {
+        // Orphan articles: draw the default circle then add red ring
+        const r = Math.sqrt(Math.max(1, (n.inbound + n.outbound) * 0.5)) * 4;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
+        ctx.fillStyle = lgCatColor(n.category);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r + 2, 0, 2 * Math.PI);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 1.5 / globalScale;
+        ctx.stroke();
+      }
+    })
+    .linkColor(() => 'rgba(100,116,139,0.3)')
+    .linkDirectionalArrowLength(3)
+    .linkDirectionalArrowRelPos(1)
+    .nodeLabel(n => `${n.isCategory ? '◆ CATEGORY PAGE\n' : ''}${n.title}\n${n.category.replace(/-/g, ' ')}\n${n.url || '(no url)'}\nIn: ${n.inbound} | Out: ${n.outbound}`)
+    .onNodeClick(n => lgSelectNode(n))
+    .onBackgroundClick(() => lgDeselectNode())
+    .onNodeHover(n => {
+      container.style.cursor = n ? 'pointer' : 'default';
+    })
+    .warmupTicks(80)
+    .cooldownTicks(40)
+    .d3AlphaDecay(0.02);
+
+  // Zoom to fit after layout settles
+  setTimeout(() => lgGraph.zoomToFit(300, 40), 1500);
+}
+
+function lgSelectNode(n) {
+  lgSelectedNode = n;
+  const detail = document.getElementById('lg-detail');
+  detail.classList.remove('hidden');
+  document.getElementById('lg-detail-title').textContent = n.title;
+  document.getElementById('lg-detail-category').innerHTML =
+    `${n.isCategory ? '<span class="badge badge-blue mr-1" style="font-size:10px">◆ Category Page</span>' : ''}${escHtml(n.category.replace(/-/g, ' '))}`;
+  const detailUrlEl = document.getElementById('lg-detail-url');
+  if (n.url) {
+    detailUrlEl.innerHTML = `<a href="${escHtml(n.url)}" target="_blank" rel="noopener" class="text-indigo-300 hover:text-indigo-200 underline">${escHtml(n.url)}</a>`;
+  } else {
+    detailUrlEl.textContent = 'No page URL available';
+  }
+
+  const outLinks = lgData._outMap[n.id] || [];
+  const inLinks = lgData._inMap[n.id] || [];
+  document.getElementById('lg-detail-out-count').textContent = outLinks.length;
+  document.getElementById('lg-detail-in-count').textContent = inLinks.length;
+
+  const nodeTitle = (id) => lgData.nodes.find(x => x.id === id)?.title || id;
+  document.getElementById('lg-detail-outbound').innerHTML = outLinks.length
+    ? outLinks.map(id => `<div><a href="#" onclick="lgClickDetailLink('${id}');return false;">${escHtml(nodeTitle(id))}</a></div>`).join('')
+    : '<div class="text-slate-500">None</div>';
+  document.getElementById('lg-detail-inbound').innerHTML = inLinks.length
+    ? inLinks.map(id => `<div><a href="#" onclick="lgClickDetailLink('${id}');return false;">${escHtml(nodeTitle(id))}</a></div>`).join('')
+    : '<div class="text-slate-500">None</div>';
+
+  // Highlight connected nodes in graph
+  const connected = new Set([n.id, ...outLinks, ...inLinks]);
+  lgGraph
+    .nodeColor(node => connected.has(node.id) ? (node.id === n.id ? '#f1f5f9' : lgCatColor(node.category)) : 'rgba(51,65,85,0.3)')
+    .linkColor(link => {
+      const s = typeof link.source === 'object' ? link.source.id : link.source;
+      const t = typeof link.target === 'object' ? link.target.id : link.target;
+      return (s === n.id || t === n.id) ? '#818cf8' : 'rgba(100,116,139,0.08)';
+    });
+}
+
+function lgDeselectNode() {
+  lgSelectedNode = null;
+  document.getElementById('lg-detail').classList.add('hidden');
+  lgApplyHighlight();
+}
+
+function lgClickDetailLink(id) {
+  const node = lgData.nodes.find(n => n.id === id);
+  if (node) {
+    // Find the graph node object (with x,y)
+    const gn = lgGraph.graphData().nodes.find(n => n.id === id);
+    if (gn) {
+      lgGraph.centerAt(gn.x, gn.y, 500);
+      lgGraph.zoom(3, 500);
+      setTimeout(() => lgSelectNode(gn), 600);
+    }
+  }
+}
+
+function lgHighlight(mode) {
+  lgHighlightMode = mode;
+  document.querySelectorAll('.lg-btn').forEach(b => b.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  lgDeselectNode();
+  lgApplyHighlight();
+}
+
+function lgApplyHighlight() {
+  if (!lgGraph) return;
+  lgGraph
+    .nodeColor(n => {
+      if (lgHighlightMode === 'categories') return lgCatColor(n.category);
+      if (lgHighlightMode === 'orphans') return (n.inbound === 0 && n.outbound === 0) ? '#ef4444' : 'rgba(51,65,85,0.3)';
+      if (lgHighlightMode === 'no-inbound') return n.inbound === 0 ? '#f59e0b' : 'rgba(51,65,85,0.3)';
+      if (lgHighlightMode === 'no-outbound') return n.outbound === 0 ? '#f97316' : 'rgba(51,65,85,0.3)';
+      return lgCatColor(n.category);
+    })
+    .linkColor(() => lgHighlightMode === 'all' ? 'rgba(100,116,139,0.3)' : 'rgba(100,116,139,0.08)');
+}
+
+function lgApplyFilters() {
+  if (!lgData || !lgGraph) return;
+  const search = document.getElementById('lg-search').value.toLowerCase();
+  const cat = document.getElementById('lg-category').value;
+
+  const visibleIds = new Set();
+  lgData.nodes.forEach(n => {
+    const matchSearch = !search || n.id.includes(search) || n.title.toLowerCase().includes(search);
+    const matchCat = !cat || n.category === cat;
+    if (matchSearch && matchCat) visibleIds.add(n.id);
+  });
+
+  const filteredNodes = lgData.nodes.filter(n => visibleIds.has(n.id));
+  const filteredLinks = lgData.links.filter(l => visibleIds.has(l.source) && visibleIds.has(l.target));
+
+  lgGraph.graphData({ nodes: filteredNodes.map(n => ({...n})), links: filteredLinks.map(l => ({...l})) });
+  setTimeout(() => lgGraph.zoomToFit(300, 40), 800);
+}
+
+function lgResetView() {
+  lgHighlightMode = 'all';
+  lgSelectedNode = null;
+
+  document.querySelectorAll('.lg-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.lg-btn[data-mode="all"]')?.classList.add('active');
+  document.getElementById('lg-search').value = '';
+  document.getElementById('lg-category').value = '';
+  document.getElementById('lg-detail').classList.add('hidden');
+  lgRenderGraph();
+}
+
+function lgBuildCoveragepanel(coverage) {
+  const el = document.getElementById('lg-coverage-list');
+  if (!el || !coverage) return;
+  const entries = Object.entries(coverage).sort((a, b) => {
+    const pctA = a[1].total ? a[1].linked / a[1].total : 0;
+    const pctB = b[1].total ? b[1].linked / b[1].total : 0;
+    return pctA - pctB;
+  });
+  if (!entries.length) { el.innerHTML = '<p class="text-slate-500 text-sm">No category data found.</p>'; return; }
+
+  el.innerHTML = entries.map(([cat, cov]) => {
+    const col = lgCatColor(cat);
+
+    // Articles → category page
+    const pctArt = cov.total ? Math.round(cov.linked / cov.total * 100) : 0;
+    const barArt = pctArt === 100 ? '#4ade80' : pctArt >= 70 ? '#facc15' : '#f87171';
+    const missingArtHtml = cov.unlinked.length > 0
+      ? `<div class="text-xs text-slate-600 mt-0.5">${cov.unlinked.length} article${cov.unlinked.length>1?'s':''} missing link to category: ${cov.unlinked.slice(0,4).map(s => `<span class="font-mono">${escHtml(s)}</span>`).join(', ')}${cov.unlinked.length > 4 ? ` +${cov.unlinked.length-4} more` : ''}</div>`
+      : `<div class="text-xs text-green-500 mt-0.5">All articles → category page ✓</div>`;
+
+    // Category → articles: Hugo generates these automatically (always 100%)
+    const catPageHtml = `<div class="mt-2 text-xs text-green-600">
+      ◆ Category page → all articles ✓ (Hugo taxonomy auto-links all articles in this category)
+    </div>`;
+
+    return `<div class="card p-3 mb-2">
+      <div class="flex items-center gap-2 mb-2">
+        <span style="display:inline-block;width:10px;height:10px;background:${col};border-radius:2px"></span>
+        <span class="text-sm font-semibold text-slate-200">${escHtml(cat.replace(/-/g,' '))}</span>
+        <span class="text-xs text-slate-500">${cov.total} articles</span>
+        <span class="badge badge-blue" style="font-size:10px">◆ virtual category node</span>
+      </div>
+      <div class="mb-1">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs text-slate-500">Articles → category page (${cov.linked}/${cov.total})</span>
+          <span class="text-xs font-semibold" style="color:${barArt}">${pctArt}%</span>
+        </div>
+        <div class="w-full bg-slate-800 rounded-full h-1.5 mb-1">
+          <div class="h-1.5 rounded-full" style="width:${pctArt}%;background:${barArt}"></div>
+        </div>
+        ${missingArtHtml}
+      </div>
+      ${catPageHtml}
+    </div>`;
+  }).join('');
+}
+
+function lgBuildPillarPanel(pillar) {
+  const el = document.getElementById('lg-pillar-list');
+  if (!el || !pillar || Object.keys(pillar).length === 0) {
+    if (el) el.innerHTML = '<p class="text-slate-500 text-sm">Pillar analysis is not enabled for WordPress sync graph yet.</p>';
+    return;
+  }
+
+  const entries = Object.entries(pillar).sort((a, b) => {
+    // No pillar first, then by article count desc
+    if (!a[1].hasPillar && b[1].hasPillar) return -1;
+    if (a[1].hasPillar && !b[1].hasPillar) return 1;
+    return b[1].total - a[1].total;
+  });
+
+  let missing = 0, incomplete = 0, complete = 0;
+  entries.forEach(([, p]) => {
+    if (!p.hasPillar) missing++;
+    else if (p.linked < p.total) incomplete++;
+    else complete++;
+  });
+
+  const mc = document.getElementById('lg-pillar-missing-count');
+  const ic = document.getElementById('lg-pillar-incomplete-count');
+  const cc = document.getElementById('lg-pillar-complete-count');
+  if (mc) mc.textContent = missing + ' missing pillar';
+  if (ic) ic.textContent = incomplete + ' incomplete';
+  if (cc) cc.textContent = complete + ' complete';
+
+  el.innerHTML = entries.map(([cat, p]) => {
+    const col = lgCatColor(cat);
+    const label = cat.replace(/-/g, ' ');
+
+    if (!p.hasPillar) {
+      // No pillar article exists — show as a to-do
+      return `<div class="flex items-start gap-3 p-2 rounded-lg" style="background:#1c0a0a">
+        <span class="badge badge-red shrink-0 mt-0.5">No Pillar</span>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span style="display:inline-block;width:8px;height:8px;background:${col};border-radius:2px"></span>
+            <span class="text-sm text-slate-200">${escHtml(label)}</span>
+            <span class="text-xs text-slate-500">${p.total} article${p.total>1?'s':''}</span>
+          </div>
+          <div class="text-xs text-slate-600 mt-0.5">Create a pillar article with slug <span class="font-mono text-indigo-400">${escHtml(cat)}</span> and link to all ${p.total} article${p.total>1?'s':''} in this category</div>
+          <div class="mt-1 flex flex-wrap gap-1">
+            ${p.unlinked.slice(0,6).map(a => `<span class="font-mono text-xs text-slate-500">${escHtml(a.slug)}</span>`).join(' ')}
+            ${p.unlinked.length > 6 ? `<span class="text-xs text-slate-600">+${p.unlinked.length-6} more</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }
+
+    const pct = p.total ? Math.round(p.linked / p.total * 100) : 100;
+    const barCol = pct === 100 ? '#4ade80' : pct >= 50 ? '#facc15' : '#f87171';
+    const status = pct === 100 ? 'badge-green' : pct >= 50 ? 'badge-yellow' : 'badge-red';
+    const statusLabel = pct === 100 ? 'Complete' : `${pct}%`;
+
+    return `<div class="flex items-start gap-3 p-2 rounded-lg" style="background:#0f1a0f">
+      <span class="badge ${status} shrink-0 mt-0.5">${statusLabel}</span>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span style="display:inline-block;width:8px;height:8px;background:${col};border-radius:2px"></span>
+          <span class="text-sm text-slate-200">${escHtml(label)}</span>
+          <span class="text-xs text-slate-500">${p.linked}/${p.total} articles linked</span>
+          <span class="font-mono text-xs text-indigo-400">/${escHtml(cat)}</span>
+        </div>
+        <div class="w-full bg-slate-800 rounded-full h-1.5 mt-1 mb-1">
+          <div class="h-1.5 rounded-full" style="width:${pct}%;background:${barCol}"></div>
+        </div>
+        ${p.unlinked.length > 0
+          ? `<div class="text-xs text-slate-600">Missing links to: ${p.unlinked.slice(0,4).map(a => `<span class="font-mono text-slate-500">${escHtml(a.slug)}</span>`).join(', ')}${p.unlinked.length > 4 ? ` +${p.unlinked.length-4} more` : ''}</div>`
+          : `<div class="text-xs text-green-500">Pillar links to all articles ✓</div>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function lgBuildOpportunities() {
+  // Find articles in the same category that don't link to each other
+  const opps = [];
+  const catGroups = {};
+  lgData.nodes.forEach(n => {
+    if (n.isCategory) return;
+    if (!catGroups[n.category]) catGroups[n.category] = [];
+    catGroups[n.category].push(n);
+  });
+
+  const linkSet = new Set(lgData.links.map(l => l.source + '→' + l.target));
+
+  for (const [cat, nodes] of Object.entries(catGroups)) {
+    if (nodes.length < 2) continue;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        const aToB = linkSet.has(a.id + '→' + b.id);
+        const bToA = linkSet.has(b.id + '→' + a.id);
+        if (!aToB && !bToA) {
+          opps.push({ from: a, to: b, category: cat });
+        }
+      }
+    }
+  }
+
+  // Sort by category size (bigger categories = more impactful) and limit to 30
+  opps.sort((a, b) => (catGroups[b.category]?.length || 0) - (catGroups[a.category]?.length || 0));
+  const top = opps.slice(0, 30);
+
+  const el = document.getElementById('lg-opp-list');
+  if (!top.length) {
+    el.innerHTML = '<p class="text-slate-500">No linking opportunities found.</p>';
+    return;
+  }
+  el.innerHTML = top.map(o => `
+    <div class="flex items-center gap-2 p-2 bg-slate-900 rounded text-xs">
+      <span class="badge" style="background:${lgCatColor(o.category)}22;color:${lgCatColor(o.category)};font-size:10px">${escHtml(o.category.replace(/-/g, ' '))}</span>
+      <span class="text-slate-300 truncate" title="${escHtml(o.from.title)}">${escHtml(o.from.title)}</span>
+      <span class="text-slate-600">↔</span>
+      <span class="text-slate-300 truncate" title="${escHtml(o.to.title)}">${escHtml(o.to.title)}</span>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// Interlinking Page
+// ============================================================
+let ilData = null;
+
+async function loadInterlinking() {
+  document.getElementById('il-list').innerHTML = '<p class="text-slate-500">Loading…</p>';
+  try {
+    ilData = await api('/api/blog/interlinking');
+    const { stats, orphans, noInbound, weakInbound, suggestions, lastRun } = ilData;
+
+    document.getElementById('il-orphans').textContent = orphans.length;
+    document.getElementById('il-no-inbound').textContent = noInbound.length;
+    document.getElementById('il-weak').textContent = weakInbound.length;
+    document.getElementById('il-suggestions').textContent = Object.keys(suggestions).length;
+    document.getElementById('il-last-run').textContent = lastRun
+      ? `Claude suggestions generated: ${new Date(lastRun).toLocaleString()}`
+      : 'No Claude suggestions yet — run the interlinking agent to generate them.';
+
+    // Show when the link graph was last updated by the cron
+    const lgUpdatedEl = document.getElementById('il-graph-updated');
+    if (lgUpdatedEl && ilData.lastGraphUpdated) {
+      lgUpdatedEl.textContent = `Link graph last updated by cron: ${new Date(ilData.lastGraphUpdated).toLocaleString()}`;
+    }
+
+    ilApplyFilter();
+    loadInterlinkingChanges();
+  } catch(e) {
+    document.getElementById('il-list').innerHTML = `<p class="text-red-400">${escHtml(String(e))}</p>`;
+  }
+}
+
+function ilApplyFilter() {
+  if (!ilData) return;
+  const { orphans, noInbound, weakInbound, suggestions } = ilData;
+  const filter = document.getElementById('il-filter').value;
+  const search = document.getElementById('il-search').value.toLowerCase();
+
+  let nodes = [];
+  if (filter === 'orphans') nodes = orphans;
+  else if (filter === 'no-inbound') nodes = noInbound;
+  else if (filter === 'weak') nodes = weakInbound;
+  else nodes = [...new Map([...orphans, ...noInbound, ...weakInbound].map(n => [n.id, n])).values()];
+
+  if (search) nodes = nodes.filter(n => n.id.includes(search) || n.title.toLowerCase().includes(search));
+
+  const el = document.getElementById('il-list');
+  if (!nodes.length) { el.innerHTML = '<p class="text-slate-500">No pages match this filter.</p>'; return; }
+
+  el.innerHTML = nodes.map(n => {
+    const sug = suggestions[n.id] || {};
+    const inboundSug = sug.inbound || [];
+    const outboundSug = sug.outbound || [];
+    const isOrphan = n.inbound === 0 && n.outbound === 0;
+    const tagColor = isOrphan ? '#450a0a' : n.inbound === 0 ? '#451a03' : '#1c1917';
+    const tagText  = isOrphan ? '#f87171' : n.inbound === 0 ? '#fb923c' : '#a8a29e';
+    const tagLabel = isOrphan ? 'Orphan' : n.inbound === 0 ? 'No Inbound' : 'Weak';
+
+    let sugHtml = '';
+    if (inboundSug.length || outboundSug.length) {
+      sugHtml = `<div class="mt-2 space-y-1">`;
+      for (const s of inboundSug) {
+        sugHtml += `<div class="flex gap-2 text-xs"><span class="text-green-500 shrink-0">← inbound</span><span class="text-slate-400">${escHtml(s.source_slug)}</span><span class="text-slate-600">anchor: "${escHtml(s.anchor_text)}"</span></div>`;
+        sugHtml += `<div class="text-xs text-slate-600 pl-16 italic">${escHtml(s.placement_hint)}</div>`;
+      }
+      for (const s of outboundSug) {
+        sugHtml += `<div class="flex gap-2 text-xs"><span class="text-blue-500 shrink-0">→ outbound</span><span class="text-slate-400">${escHtml(s.target_slug)}</span><span class="text-slate-600">anchor: "${escHtml(s.anchor_text)}"</span></div>`;
+        sugHtml += `<div class="text-xs text-slate-600 pl-16 italic">${escHtml(s.placement_hint)}</div>`;
+      }
+      sugHtml += `</div>`;
+    } else {
+      sugHtml = `<p class="text-xs text-slate-600 mt-1">No suggestions yet — run: <code class="text-indigo-400">python3 blog_automation/interlinking_agent.py --limit 20</code></p>`;
+    }
+
+    return `<div class="card mb-3">
+      <div class="flex items-start gap-3">
+        <span class="badge shrink-0" style="background:${tagColor};color:${tagText}">${tagLabel}</span>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-mono text-sm text-slate-200">${escHtml(n.id)}</span>
+            <span class="text-xs text-slate-500">${escHtml(n.category.replace(/-/g,' '))}</span>
+            <span class="text-xs text-slate-600">↓${n.inbound} ↑${n.outbound}</span>
+          </div>
+          <div class="text-xs text-slate-500 mt-0.5 truncate">${escHtml(n.title)}</div>
+          ${sugHtml}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Interlinking Change Log ───────────────────────────────────────────
+async function loadInterlinkingChanges() {
+  const el = document.getElementById('il-changes-list');
+  el.innerHTML = '<p class="text-xs text-slate-600">Loading…</p>';
+  try {
+    const data = await api('/api/blog/interlinking-changes');
+    const { changes, totalApplied, articlesFixed } = data;
+    if (!changes || !changes.length) {
+      el.innerHTML = '<p class="text-xs text-slate-600">No changes recorded yet. The cron runs every 6 hours.</p>';
+      return;
+    }
+    const summaryHtml = `<div class="flex gap-4 mb-3 text-xs text-slate-400">
+      <span><span class="text-indigo-400 font-semibold">${totalApplied}</span> links applied</span>
+      <span><span class="text-green-400 font-semibold">${articlesFixed}</span> orphans addressed</span>
+    </div>`;
+
+    // Group by orphan_slug
+    const grouped = {};
+    for (const c of changes) {
+      if (!grouped[c.orphan_slug]) grouped[c.orphan_slug] = { date: c.applied_at, links: [], commit: c.commit_sha };
+      grouped[c.orphan_slug].links.push(c);
+    }
+    const rows = Object.entries(grouped).map(([orphan, info]) => {
+      const d = new Date(info.date).toLocaleDateString();
+      const t = new Date(info.date).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+      const commitHtml = info.commit ? `<a href="https://github.com/brandovise25/liveingermany/commit/${info.commit}" target="_blank" class="text-indigo-400 font-mono" style="font-size:10px">${info.commit.slice(0,8)}</a>` : '';
+      const linksHtml = info.links.map(l => {
+        const clicksDelta = l.clicks_after != null
+          ? `<span class="${l.clicks_after > l.clicks_before ? 'text-green-400' : l.clicks_after < l.clicks_before ? 'text-red-400' : 'text-slate-500'}" style="font-size:10px">
+              ${l.clicks_before}→${l.clicks_after} clicks
+             </span>`
+          : '<span class="text-slate-700" style="font-size:10px">GSC pending</span>';
+        const arrow = l.direction === 'inbound'
+          ? `<span class="text-green-500">←</span> <span class="text-slate-400">${escHtml(l.source_slug)}</span>`
+          : `<span class="text-blue-400">→</span> <span class="text-slate-400">${escHtml(l.target_slug)}</span>`;
+        return `<div class="flex items-center gap-2 py-0.5">
+          ${arrow}
+          <span class="text-slate-600" style="font-size:10px">anchor: "${escHtml(l.anchor_text || '')}"</span>
+          ${clicksDelta}
+        </div>`;
+      }).join('');
+      return `<div class="border border-slate-800 rounded p-3 mb-2">
+        <div class="flex items-center gap-3 mb-1">
+          <span class="font-mono text-sm text-slate-200">${escHtml(orphan)}</span>
+          <span class="text-xs text-slate-600">${d} ${t}</span>
+          ${commitHtml}
+        </div>
+        <div class="text-xs space-y-0.5">${linksHtml}</div>
+      </div>`;
+    }).join('');
+    el.innerHTML = summaryHtml + rows;
+  } catch(e) {
+    el.innerHTML = `<p class="text-red-400 text-xs">${escHtml(String(e))}</p>`;
+  }
+}
+
+// ============================================================
+// Cannibalism Page
+// ============================================================
+const CB_ACTION_COLORS = {
+  REDIRECT:                { bg:'#450a0a', text:'#f87171', label:'Redirect' },
+  MERGE:                   { bg:'#1a1a2e', text:'#818cf8', label:'Merge' },
+  DIFFERENTIATE:           { bg:'#064e3b', text:'#34d399', label:'Differentiate' },
+  CONSOLIDATE_INTO_SECTION:{ bg:'#451a03', text:'#fb923c', label:'Consolidate' },
+};
+
+async function loadCannibalism() {
+  document.getElementById('cb-gsc-list').innerHTML = '<p class="text-slate-500">Loading…</p>';
+  document.getElementById('cb-structural-list').innerHTML = '<p class="text-slate-500">Loading…</p>';
+  try {
+    const data = await api('/api/blog/cannibalism');
+    const { gscGroups, structuralGroups, lastRun } = data;
+
+    document.getElementById('cb-last-run').textContent = lastRun
+      ? `Claude structural analysis: ${new Date(lastRun).toLocaleString()}`
+      : 'No structural analysis yet.';
+
+    // GSC groups
+    const gscEl = document.getElementById('cb-gsc-list');
+    if (!gscGroups.length) {
+      gscEl.innerHTML = '<p class="text-slate-500">No GSC cannibalism detected (or no GSC data imported yet).</p>';
+    } else {
+      gscEl.innerHTML = `<table><thead><tr>
+        <th>Query</th><th>Slugs</th><th>Impressions</th><th>Action</th>
+      </tr></thead><tbody>` +
+      gscGroups.map(g => {
+        const slugBadges = g.slugs.map(s => `<span class="font-mono text-xs text-slate-300">${escHtml(s)}</span>`).join('<br>');
+        // Build action cell from competing array if available
+        let actionCell = '—';
+        if (g.competing && g.competing.length) {
+          actionCell = g.competing.map(c => {
+            const ac = CB_ACTION_COLORS[c.action] || { bg:'#1e293b', text:'#94a3b8', label: c.action };
+            return `<span class="badge" style="background:${ac.bg};color:${ac.text}">${escHtml(ac.label)}</span> <span class="text-xs text-slate-500">${escHtml(c.slug)}</span>`;
+          }).join('<br>');
+        }
+        return `<tr>
+          <td><span class="font-medium text-slate-200">${escHtml(g.query)}</span></td>
+          <td>${slugBadges}</td>
+          <td class="text-right">${Number(g.impressions).toLocaleString()}</td>
+          <td>${actionCell}</td>
+        </tr>`;
+      }).join('') + '</tbody></table>';
+    }
+
+    // Structural groups
+    const stEl = document.getElementById('cb-structural-list');
+    if (!structuralGroups.length) {
+      stEl.innerHTML = '<p class="text-slate-500">No structural analysis yet — run <code class="text-indigo-400">python3 blog_automation/cannibalism_agent.py</code></p>';
+    } else {
+      stEl.innerHTML = structuralGroups.map(g => {
+        const competing = (g.competing || []).map(c => {
+          const ac = CB_ACTION_COLORS[c.action] || { bg:'#1e293b', text:'#94a3b8', label: c.action };
+          return `<div class="flex items-start gap-2 mt-2">
+            <span class="badge shrink-0" style="background:${ac.bg};color:${ac.text}">${escHtml(ac.label)}</span>
+            <div>
+              <span class="font-mono text-xs text-slate-300">${escHtml(c.slug)}</span>
+              ${c.action_detail ? `<div class="text-xs text-slate-500 mt-0.5">${escHtml(c.action_detail)}</div>` : ''}
+            </div>
+          </div>`;
+        }).join('');
+
+        return `<div class="card mb-3">
+          <div class="text-xs text-slate-500 mb-1 uppercase tracking-wider">Conflict</div>
+          <div class="font-semibold text-slate-200 mb-1">"${escHtml(g.conflict_keyword)}"</div>
+          <div class="text-xs text-slate-500">Primary: <span class="font-mono text-slate-300">${escHtml(g.primary_slug)}</span>${g.reason_primary ? ` — ${escHtml(g.reason_primary)}` : ''}</div>
+          ${competing}
+        </div>`;
+      }).join('');
+    }
+  } catch(e) {
+    document.getElementById('cb-gsc-list').innerHTML = `<p class="text-red-400">${escHtml(String(e))}</p>`;
+    document.getElementById('cb-structural-list').innerHTML = '';
+  }
+}
+
+// ============================================================
+
+
+// ============================================================
+// SSE
+// ============================================================
+function connectSSE() {
+  if (sseSource) sseSource.close();
+  sseSource = new EventSource('/events');
+
+  sseSource.addEventListener('connected', () => {
+    sseConnected = true;
+    document.getElementById('conn-dot').className = 'dot dot-green';
+    document.getElementById('conn-status').textContent = 'live';
+  });
+
+  sseSource.addEventListener('new_message', () => {
+    if (currentSection === 'overview') loadOverview();
+    else if (currentSection === 'messages') loadMessages();
+  });
+
+  sseSource.addEventListener('task_update', () => {
+    if (currentSection === 'overview') loadOverview();
+    else if (currentSection === 'tasks') loadTasks();
+  });
+
+  sseSource.addEventListener('agents', (e) => {
+    const data = JSON.parse(e.data);
+    // Update overview stats if visible
+    if (currentSection === 'overview') {
+      document.getElementById('stat-agents').textContent =
+
+        data.stats.activeCount + '/' + data.stats.maxConcurrent;
+    }
+    if (currentSection === 'agents') {
+      document.getElementById('agent-active-count').textContent = data.containers.length;
+      document.getElementById('agent-waiting-count').textContent = data.stats.waitingCount;
+      // Refresh full agent view every 10s only to avoid thrashing
+    }
+  });
+
+  sseSource.addEventListener('link_graph_updated', (e) => {
+    const { updatedAt } = JSON.parse(e.data);
+    const timeStr = new Date(updatedAt).toLocaleString();
+
+    // Update timestamps wherever visible
+    const lgEl = document.getElementById('lg-last-updated');
+    if (lgEl) lgEl.textContent = `Graph last updated by interlinking cron: ${timeStr}`;
+    const ilEl = document.getElementById('il-graph-updated');
+    if (ilEl) ilEl.textContent = `Link graph last updated by cron: ${timeStr}`;
+
+    // Flash the live badge on Link Graph section
+    const badge = document.getElementById('lg-live-badge');
+    if (badge) {
+      badge.style.display = 'inline';
+      setTimeout(() => { badge.style.display = 'none'; }, 10000);
+    }
+
+    // Reload whichever section is currently visible
+    if (currentSection === 'blog-links') loadLinkGraph();
+    if (currentSection === 'blog-interlinking') loadInterlinking();
+  });
+
+  sseSource.onerror = () => {
+    sseConnected = false;
+    document.getElementById('conn-dot').className = 'dot dot-red';
+    document.getElementById('conn-status').textContent = 'reconnecting…';
+    // EventSource auto-reconnects
+  };
+}
+
+// ============================================================
+// AI Usage & Quotas
+// ============================================================
+async function loadBlogTokens() {
+  const period = document.getElementById('blog-token-period').value;
+  const els = ['blog-tok-by-model','blog-tok-by-agent','blog-tok-daily','blog-tok-agent-model'].map(id => document.getElementById(id));
+  els.forEach(el => { if (el) el.innerHTML = '<span class="text-slate-500 text-sm">Loading…</span>'; });
+  try {
+    const data = await api('/api/tokens?period=' + period);
+    const { local, anthropic, openai } = data;
+    const t = local.total;
+
+    document.getElementById('blog-tok-total-cost').textContent = fmtCost(t.cost);
+    document.getElementById('blog-tok-total-input').textContent = fmtTokens(t.input);
+    document.getElementById('blog-tok-total-output').textContent = fmtTokens(t.output);
+    document.getElementById('blog-tok-cache-savings').textContent = fmtTokens(t.cacheRead);
+
+    // By Model
+    const models = Object.entries(local.byModel).sort((a,b) => b[1].cost - a[1].cost);
+    const maxCostM = models[0]?.[1]?.cost || 1;
+    document.getElementById('blog-tok-by-model').innerHTML = models.length ? models.map(([model, u]) => {
+      const pct = Math.round(u.cost / maxCostM * 100);
+      const col = modelColor(model);
+      return `<div class="mb-3">
+        <div class="flex justify-between mb-1">
+          <span class="text-xs font-mono text-slate-300">${escHtml(model)}</span>
+          <span class="text-xs font-semibold" style="color:${col}">${fmtCost(u.cost)}</span>
+        </div>
+        <div class="w-full bg-slate-900 rounded-full h-2 mb-1">
+          <div class="h-2 rounded-full" style="width:${pct}%;background:${col}"></div>
+        </div>
+        <div class="flex gap-3 text-xs text-slate-500">
+          <span>↓ ${fmtTokens(u.input)} in</span>
+          <span>↑ ${fmtTokens(u.output)} out</span>
+          <span>💾 ${fmtTokens(u.cacheRead)} cached</span>
+          <span>${u.requests} calls</span>
+        </div>
+      </div>`;
+    }).join('') : '<p class="text-slate-500 text-sm">No data.</p>';
+
+    // By Agent
+    const agents = Object.entries(local.byAgent).sort((a,b) => b[1].cost - a[1].cost);
+    const maxCostA = agents[0]?.[1]?.cost || 1;
+    document.getElementById('blog-tok-by-agent').innerHTML = agents.length ? agents.map(([label, u]) => {
+      const pct = Math.round(u.cost / maxCostA * 100);
+      const col = agentColor(label);
+      const [type, name] = label.includes(':') ? label.split(':') : ['', label];
+      return `<div class="mb-3">
+        <div class="flex justify-between mb-1">
+          <div class="flex items-center gap-1">
+            ${type === 'andy' ? '<span class="badge badge-blue text-xs">andy</span>' : '<span class="badge badge-green text-xs">claude-code</span>'}
+            <span class="text-xs text-slate-300">${escHtml(name)}</span>
+          </div>
+          <span class="text-xs font-semibold" style="color:${col}">${fmtCost(u.cost)}</span>
+        </div>
+        <div class="w-full bg-slate-900 rounded-full h-2 mb-1">
+          <div class="h-2 rounded-full" style="width:${pct}%;background:${col}"></div>
+        </div>
+        <div class="flex gap-3 text-xs text-slate-500">
+          <span>↓ ${fmtTokens(u.input + u.cacheWrite)}</span>
+          <span>↑ ${fmtTokens(u.output)}</span>
+          <span>💾 ${fmtTokens(u.cacheRead)}</span>
+          <span>${u.requests} calls</span>
+        </div>
+      </div>`;
+    }).join('') : '<p class="text-slate-500 text-sm">No data.</p>';
+
+    // Daily
+    const days = Object.entries(local.byDay).sort((a,b) => a[0].localeCompare(b[0]));
+    if (!days.length) {
+      document.getElementById('blog-tok-daily').innerHTML = '<p class="text-slate-500 text-sm">No data.</p>';
+    } else {
+      const maxDayCost = Math.max(...days.map(([,u]) => u.cost)) || 1;
+      document.getElementById('blog-tok-daily').innerHTML = `
+        <table><thead><tr>
+          <th>Date</th><th>Input</th><th>Output</th><th>Cache Write</th><th>Cache Read</th><th>Requests</th><th>Est. Cost</th><th style="width:120px"></th>
+        </tr></thead>
+        <tbody>${days.map(([day, u]) => `
+          <tr>
+            <td class="font-mono text-xs">${day}</td>
+            <td class="text-xs">${fmtTokens(u.input)}</td>
+            <td class="text-xs">${fmtTokens(u.output)}</td>
+            <td class="text-xs text-yellow-400">${fmtTokens(u.cacheWrite)}</td>
+            <td class="text-xs text-green-400">${fmtTokens(u.cacheRead)}</td>
+            <td class="text-xs">${u.requests}</td>
+            <td class="text-xs font-semibold text-indigo-400">${fmtCost(u.cost)}</td>
+            <td>
+              <div class="bg-slate-900 rounded-full h-1.5 w-full">
+                <div class="bg-indigo-500 h-1.5 rounded-full" style="width:${Math.round(u.cost/maxDayCost*100)}%"></div>
+              </div>
+            </td>
+          </tr>`).join('')}
+        </tbody></table>`;
+    }
+
+    // Agent × Model
+    const agentModels = Object.entries(local.byAgentModel).sort((a,b) => {
+      const ca = Object.values(a[1]).reduce((s,u) => s + u.cost, 0);
+      const cb = Object.values(b[1]).reduce((s,u) => s + u.cost, 0);
+      return cb - ca;
+    });
+    document.getElementById('blog-tok-agent-model').innerHTML = agentModels.length ? `
+      <table><thead><tr><th>Agent</th><th>Model</th><th>Input</th><th>Output</th><th>Cache Read</th><th>Calls</th><th>Cost</th></tr></thead>
+      <tbody>${agentModels.flatMap(([label, modelMap]) => {
+        const [type, name] = label.includes(':') ? label.split(':') : ['', label];
+        return Object.entries(modelMap).sort((a,b) => b[1].cost - a[1].cost).map(([model, u]) => `
+          <tr>
+            <td>
+              <div class="flex items-center gap-1">
+                ${type === 'andy' ? '<span class="badge badge-blue" style="font-size:10px">andy</span>' : '<span class="badge badge-green" style="font-size:10px">cc</span>'}
+                <span class="text-xs text-slate-300">${escHtml(name)}</span>
+              </div>
+            </td>
+            <td class="font-mono text-xs" style="color:${modelColor(model)}">${escHtml(model)}</td>
+            <td class="text-xs">${fmtTokens(u.input)}</td>
+            <td class="text-xs">${fmtTokens(u.output)}</td>
+            <td class="text-xs text-green-400">${fmtTokens(u.cacheRead)}</td>
+            <td class="text-xs">${u.requests}</td>
+            <td class="text-xs font-semibold text-indigo-400">${fmtCost(u.cost)}</td>
+          </tr>`);
+      }).join('')}
+      </tbody></table>` : '<p class="text-slate-500 text-sm">No data.</p>';
+
+    // Billing panels
+    blogRenderAnthropicBilling(anthropic, data.billingCachedAt);
+    blogRenderOpenAIBilling(openai);
+
+  } catch(e) {
+    console.error('Blog token load error:', e);
+    const el = document.getElementById('blog-tok-by-model');
+    if (el) el.innerHTML = `<p class="text-red-400 text-sm">${escHtml(String(e))}</p>`;
+  }
+}
+
+function blogRenderAnthropicBilling(data, cachedAt) {
+  const statusEl = document.getElementById('blog-tok-anthropic-status');
+  const el = document.getElementById('blog-tok-anthropic');
+  if (!data) {
+    statusEl.textContent = 'fetching…';
+    statusEl.className = 'badge badge-yellow';
+    el.innerHTML = '<p class="text-slate-400 text-sm">⏳ Fetching from Anthropic API in background… refresh in ~20s</p>';
+    setTimeout(() => loadBlogTokens(), 20000);
+    return;
+  }
+  statusEl.textContent = 'connected';
+  statusEl.className = 'badge badge-green';
+  try {
+    let totalCost = 0;
+    for (const bucket of (data.cost?.data || [])) {
+      for (const r of (bucket.results || [])) totalCost += parseFloat(r.amount || '0') / 100;
+    }
+    let totalIn = 0, totalOut = 0, totalCw = 0, totalCr = 0;
+    for (const bucket of (data.usage?.data || [])) {
+      for (const r of (bucket.results || [])) {
+        totalIn += r.uncached_input_tokens || r.input_tokens || 0;
+        totalOut += r.output_tokens || 0;
+        const cc = r.cache_creation || {};
+        totalCw += (cc.ephemeral_1h_input_tokens || 0) + (cc.ephemeral_5m_input_tokens || 0);
+        totalCr += r.cache_read_input_tokens || 0;
+      }
+    }
+    el.innerHTML = `
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-indigo-400">${fmtCost(totalCost)}</div><div class="text-xs text-slate-500">Total cost</div></div>
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-blue-400">${fmtTokens(totalIn)}</div><div class="text-xs text-slate-500">Input tokens</div></div>
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-purple-400">${fmtTokens(totalOut)}</div><div class="text-xs text-slate-500">Output tokens</div></div>
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-green-400">${fmtTokens(totalCr)}</div><div class="text-xs text-slate-500">Cache read</div></div>
+      </div>
+      <div class="text-xs text-slate-500">Source: Anthropic Admin API · Cached 5 min</div>`;
+  } catch(e) {
+    el.innerHTML = `<p class="text-red-400 text-sm">Parse error: ${escHtml(String(e))}</p>`;
+  }
+}
+
+function blogRenderOpenAIBilling(data) {
+  const statusEl = document.getElementById('blog-tok-openai-status');
+  const el = document.getElementById('blog-tok-openai');
+  if (!data) {
+    statusEl.textContent = 'fetching…';
+    statusEl.className = 'badge badge-yellow';
+    el.innerHTML = '<p class="text-slate-400 text-sm">⏳ Fetching from OpenAI API in background…</p>';
+    return;
+  }
+  if (data._error) {
+    statusEl.textContent = 'error';
+    statusEl.className = 'badge badge-red';
+    el.innerHTML = `<p class="text-red-400 text-sm">API error: ${escHtml(data._error)}</p>`;
+    return;
+  }
+  statusEl.textContent = 'connected';
+  statusEl.className = 'badge badge-green';
+  try {
+    let totalCost = 0;
+    for (const bucket of (data.cost?.data || [])) {
+      totalCost += (bucket.results || []).reduce((s, r) => s + (r.amount?.value ?? 0), 0);
+    }
+    let totalIn = 0, totalOut = 0;
+    for (const bucket of (data.usage?.data || [])) {
+      for (const r of (bucket.results || [])) {
+        totalIn += r.input_tokens || 0;
+        totalOut += r.output_tokens || 0;
+      }
+    }
+    el.innerHTML = `
+      <div class="grid grid-cols-3 gap-3 mb-4">
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-orange-400">${fmtCost(totalCost)}</div><div class="text-xs text-slate-500">Total cost</div></div>
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-yellow-400">${fmtTokens(totalIn)}</div><div class="text-xs text-slate-500">Input tokens</div></div>
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-amber-400">${fmtTokens(totalOut)}</div><div class="text-xs text-slate-500">Output tokens</div></div>
+      </div>
+      <div class="text-xs text-slate-500">Source: OpenAI Admin API · Cached 5 min</div>`;
+  } catch(e) {
+    el.innerHTML = `<p class="text-red-400 text-sm">Parse error: ${escHtml(String(e))}</p>`;
+  }
+}
+
+function blogQuotaColor(pct) {
+  if (pct === null || pct === undefined) return 'bg-slate-700';
+  if (pct >= 90) return 'bg-red-500';
+  if (pct >= 70) return 'bg-yellow-500';
+  return 'bg-indigo-500';
+}
+
+function blogRenderQuotaCard(provider, data) {
+  const LABELS = { claude: 'Claude', codex: 'Codex / ChatGPT', gemini: 'Gemini', cerebras: 'Cerebras', kimi: 'Kimi', minimax: 'Minimax', zai: 'Z.AI' };
+  const name = LABELS[provider] || provider;
+  if (!data) return `<div class="card opacity-40 p-3"><div class="text-xs font-semibold text-slate-500 mb-1">${escHtml(name)}</div><div class="text-xs text-slate-600">no key</div></div>`;
+  if (data.info) {
+    return `<div class="card p-3 border border-slate-600/90"><div class="text-xs font-semibold text-slate-300 mb-1.5">${escHtml(name)}</div><p class="text-xs text-slate-500 leading-relaxed m-0">${escHtml(data.message || '')}</p></div>`;
+  }
+  if (data.error && !data.primary) return `<div class="card p-3" style="border-color:#450a0a"><div class="text-xs font-semibold text-slate-400 mb-1">${escHtml(name)}</div><div class="text-xs text-red-400 truncate">${escHtml(data.error.slice(0,60))}</div></div>`;
+  const windows = [data.primary, data.secondary].filter(Boolean);
+  const windowsHtml = windows.map(w => {
+    const pct = w.usedPercent ?? 0;
+    const remaining = 100 - pct;
+    const resetStr = w.resetsAt ? new Date(w.resetsAt).toLocaleTimeString() : null;
+    return `<div class="mb-2">
+      <div class="flex justify-between mb-0.5">
+        <span class="text-xs text-slate-500 truncate max-w-28">${escHtml(w.windowLabel)}</span>
+        <span class="text-xs font-semibold ${pct>=90?'text-red-400':pct>=70?'text-yellow-400':'text-emerald-400'}">${remaining}%</span>
+      </div>
+      <div class="w-full bg-slate-700 rounded-full h-1.5">
+        <div class="${blogQuotaColor(pct)} h-1.5 rounded-full" style="width:${Math.min(pct,100)}%"></div>
+      </div>
+      ${resetStr ? `<div class="text-xs text-slate-600 mt-0.5">↺ ${resetStr}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `<div class="card p-3"><div class="text-xs font-semibold text-slate-300 mb-2">${escHtml(name)}</div>${windowsHtml}</div>`;
+}
+
+async function loadBlogQuota() {
+  const grid = document.getElementById('blog-quota-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div class="card text-slate-500 text-xs col-span-full p-3">Loading…</div>';
+  try {
+    const res = await fetch('/api/quota', { credentials: 'same-origin' });
+    const data = await res.json();
+    const { providers, cachedAt } = data;
+    const cachedEl = document.getElementById('blog-quota-cached-at');
+    if (cachedEl) cachedEl.textContent = cachedAt ? `last fetched ${new Date(cachedAt).toLocaleTimeString()}` : '';
+    grid.innerHTML = Object.entries(providers).map(([k, v]) => blogRenderQuotaCard(k, v)).join('') || '<p class="text-slate-500 text-sm">No provider data.</p>';
+  } catch(e) {
+    grid.innerHTML = `<div class="card text-red-400 text-sm col-span-full">${escHtml(String(e))}</div>`;
+  }
+}
+
+// ============================================================
+// WordPress Sync
+// ============================================================
+async function runWpSync() {
+  try {
+    const r = await postWithWriteAuth('/api/blog/wp-sync/run', { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || data.message || 'Sync failed');
+    if (!data.started) {
+      console.info(data.message || 'Sync already running');
+    }
+    await loadWpSync();
+  } catch (e) {
+    alert('WordPress sync failed: ' + String(e));
+  }
+}
+
+async function rebuildGraphFromLinkPage() {
+  const btn = document.getElementById('lg-rebuild-btn');
+  const status = document.getElementById('lg-rebuild-status');
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.textContent = 'Rebuilding…';
+  }
+  if (status) status.textContent = 'Rebuilding graph from synced data…';
+  try {
+    const r = await postWithWriteAuth('/api/blog/wp-graph/rebuild', { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || data.message || 'Graph rebuild failed');
+    await Promise.all([loadLinkGraph(), loadWpSync()]);
+    if (status) status.textContent = data.message || 'Graph rebuilt.';
+  } catch (e) {
+    if (status) status.textContent = `Failed: ${String(e)}`;
+    alert('Graph rebuild failed: ' + String(e));
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.textContent = 'Rebuild Graph';
+    }
+  }
+}
+
+async function loadWpArticles(page = wpsPage) {
+  wpsPage = Math.max(1, Number(page) || 1);
+  const q = document.getElementById('wps-search').value.trim();
+  const type = document.getElementById('wps-type').value.trim();
+  const status = document.getElementById('wps-status-filter').value.trim();
+  const category = document.getElementById('wps-category').value.trim();
+  const offset = (wpsPage - 1) * WPS_PAGE_SIZE;
+  const params = new URLSearchParams({
+    limit: String(WPS_PAGE_SIZE),
+    offset: String(offset),
+  });
+  if (q) params.set('q', q);
+  if (type) params.set('type', type);
+  if (status) params.set('status', status);
+  if (category) params.set('category', category);
+
+  const body = document.getElementById('wps-table-body');
+  const pageSummary = document.getElementById('wps-page-summary');
+  const pageLabel = document.getElementById('wps-page-label');
+  const prevBtn = document.getElementById('wps-page-prev');
+  const nextBtn = document.getElementById('wps-page-next');
+  body.innerHTML = '<tr><td colspan="7" class="py-4 text-slate-500"><span class="loading-spinner"></span>Loading…</td></tr>';
+
+  try {
+    const data = await api('/api/blog/wp-articles?' + params.toString());
+    const total = Number(data.total || 0);
+    const maxPage = Math.max(1, Math.ceil(total / WPS_PAGE_SIZE));
+    if (wpsPage > maxPage) {
+      wpsPage = maxPage;
+      return loadWpArticles(wpsPage);
+    }
+    pageLabel.textContent = `Page ${wpsPage} / ${maxPage}`;
+    pageSummary.textContent =
+      total === 0
+        ? 'Showing 0 of 0'
+        : `Showing ${offset + 1}-${Math.min(offset + (data.articles?.length || 0), total)} of ${total}`;
+    prevBtn.disabled = wpsPage <= 1;
+    nextBtn.disabled = wpsPage >= maxPage;
+    prevBtn.style.opacity = prevBtn.disabled ? '0.45' : '1';
+    nextBtn.style.opacity = nextBtn.disabled ? '0.45' : '1';
+
+    if (!data.articles || data.articles.length === 0) {
+      body.innerHTML = '<tr><td colspan="7" class="py-4 text-slate-500">No records found.</td></tr>';
+      return;
+    }
+    body.innerHTML = data.articles.map((a) => {
+      let catText = '';
+      try {
+        const cats = JSON.parse(a.categories_json || '[]');
+        catText = cats.map(c => c.name).join(', ');
+      } catch {
+        catText = '';
+      }
+      return `<tr class="border-b border-slate-800">
+        <td class="py-2 pr-3 text-slate-300">${escHtml(a.wp_type || '')}</td>
+        <td class="py-2 pr-3 text-slate-400">${escHtml(a.status || '')}</td>
+        <td class="py-2 pr-3 text-indigo-300">${escHtml(a.slug || '')}</td>
+        <td class="py-2 pr-3 text-slate-200">${
+          a.source_url
+            ? `<a href="${escHtml(a.source_url)}" target="_blank" rel="noopener" class="text-indigo-300 hover:text-indigo-200 underline">${escHtml(a.title || a.source_url)}</a>`
+            : escHtml(a.title || '')
+        }</td>
+        <td class="py-2 pr-3 text-right text-slate-300">${a.inbound_links || 0}</td>
+        <td class="py-2 pr-3 text-right text-slate-300">${a.outbound_links || 0}</td>
+        <td class="py-2 text-slate-400">${escHtml(catText)}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    pageSummary.textContent = 'Failed to load records';
+    body.innerHTML = `<tr><td colspan="7" class="py-4 text-red-400">${escHtml(String(e))}</td></tr>`;
+  }
+}
+
+async function loadWpSync() {
+  try {
+    const [state, graph, coverage] = await Promise.all([
+      api('/api/blog/wp-sync/state'),
+      api('/api/blog/wp-link-graph'),
+      api('/api/blog/wp-feature-coverage'),
+    ]);
+    document.getElementById('wps-count').textContent = String(state.articleCount || 0);
+    document.getElementById('wps-configured').textContent = state.configured ? 'yes' : 'no';
+    document.getElementById('wps-site').textContent = state.siteUrl || 'not configured';
+    document.getElementById('wps-interval').textContent = `${state.apiRequestIntervalMs || 0} ms`;
+    document.getElementById('wps-content-dir').textContent = state.contentDir || '-';
+    document.getElementById('wps-graph-nodes').textContent = String(graph.stats?.totalNodes || 0);
+    document.getElementById('wps-graph-edges').textContent = String(graph.stats?.totalEdges || 0);
+    document.getElementById('wps-graph-summary').innerHTML = `
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-slate-900 rounded p-3"><div class="text-xs text-slate-500">Nodes</div><div class="text-lg text-indigo-400 font-bold">${graph.stats?.totalNodes || 0}</div></div>
+        <div class="bg-slate-900 rounded p-3"><div class="text-xs text-slate-500">Edges</div><div class="text-lg text-emerald-400 font-bold">${graph.stats?.totalEdges || 0}</div></div>
+        <div class="bg-slate-900 rounded p-3"><div class="text-xs text-slate-500">Orphans</div><div class="text-lg text-red-400 font-bold">${graph.stats?.orphanCount || 0}</div></div>
+        <div class="bg-slate-900 rounded p-3"><div class="text-xs text-slate-500">Coverage</div><div class="text-lg text-slate-200 font-bold">${(graph.stats?.totalNodes || 0) ? Math.round(((graph.stats.totalNodes - (graph.stats.orphanCount || 0)) / graph.stats.totalNodes) * 100) : 0}%</div></div>
+      </div>`;
+
+    const run = state.latestRun || {};
+    document.getElementById('wps-last-run').textContent = run.started_at ? fmtTime(run.started_at) : 'never';
+    document.getElementById('wps-last-status').textContent = run.status || 'n/a';
+    document.getElementById('wps-fetched').textContent = String(run.fetched_count || 0);
+    document.getElementById('wps-upserted').textContent = String(run.upserted_count || 0);
+
+    const progressTotal = Number(run.total_types || 0);
+    const progressDone = Number(run.processed_types || 0);
+    const isRunning = state.running || run.status === 'running';
+    const percent = progressTotal > 0 ? Math.round((progressDone / progressTotal) * 100) : (isRunning ? 15 : 0);
+    document.getElementById('wps-progress-bar').style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    document.getElementById('wps-progress-label').textContent = isRunning
+      ? `${progressDone}/${progressTotal || '?'} types`
+      : run.status === 'success'
+        ? 'completed'
+        : run.status === 'error'
+          ? 'failed'
+          : 'idle';
+
+    document.getElementById('wps-feature-coverage').innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="bg-slate-900 rounded p-3">
+          <div class="text-xs text-slate-500 mb-1">Audit Coverage</div>
+          <div class="text-lg font-bold text-indigo-300">${coverage.matched.audit} / ${coverage.matched.audit + coverage.missingInWp.audit.length}</div>
+          <div class="text-xs text-slate-600 mt-1">Missing in WP: ${coverage.missingInWp.audit.length}</div>
+        </div>
+        <div class="bg-slate-900 rounded p-3">
+          <div class="text-xs text-slate-500 mb-1">Queue Coverage</div>
+          <div class="text-lg font-bold text-indigo-300">${coverage.matched.queue} / ${coverage.matched.queue + coverage.missingInWp.queue.length}</div>
+          <div class="text-xs text-slate-600 mt-1">Missing in WP: ${coverage.missingInWp.queue.length}</div>
+        </div>
+        <div class="bg-slate-900 rounded p-3">
+          <div class="text-xs text-slate-500 mb-1">Performance Coverage</div>
+          <div class="text-lg font-bold text-indigo-300">${coverage.matched.performance} / ${coverage.matched.performance + coverage.missingInWp.performance.length}</div>
+          <div class="text-xs text-slate-600 mt-1">Missing in WP: ${coverage.missingInWp.performance.length}</div>
+        </div>
+      </div>`;
+
+    await loadWpArticles();
+
+    if (isRunning && currentSection === 'blog-wp-sync') {
+      setTimeout(() => {
+        if (currentSection === 'blog-wp-sync') loadWpSync();
+      }, 60000);
+    }
+  } catch (e) {
+    console.error('WordPress sync load error', e);
+  }
+}
+
+// ============================================================
+// Init
+// ============================================================
+window.addEventListener('DOMContentLoaded', () => {
+  connectSSE();
+  loadBlog();
+  const syncPageRefreshMs = 60000;
+  setInterval(() => {
+    if (currentSection === 'blog') loadBlog();
+    if (currentSection === 'blog-wp-sync') loadWpSync();
+    if (currentSection === 'blog-links') loadLinkGraph();
+    if (currentSection === 'blog-interlinking') {
+      loadInterlinking();
+      loadInterlinkingChanges();
+    }
+    if (currentSection === 'blog-cannibalism') loadCannibalism();
+  }, syncPageRefreshMs);
+});
+</script>
+</body>
+</html>

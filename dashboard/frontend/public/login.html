@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard sign in</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="shared.css" />
+  <style>
+    body { min-height: 100vh; display: grid; place-items: center; background: #0f172a; color: #e2e8f0; }
+  </style>
+</head>
+<body>
+  <div class="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900/90 p-8 shadow-xl">
+    <h1 class="text-xl font-semibold text-slate-100 mb-1">NanoClaw dashboard</h1>
+    <p class="text-sm text-slate-500 mb-6">Sign in with the credentials from <code class="text-slate-400">DASHBOARD_BASIC_AUTH_USER</code> / <code class="text-slate-400">PASSWORD</code> in <code class="text-slate-400">.env</code>.</p>
+    <p id="msg" class="text-sm text-red-400 min-h-[1.25rem] mb-3"></p>
+    <form id="f" class="space-y-4">
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Email / username</label>
+        <input name="username" type="text" autocomplete="username" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100" required />
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Password</label>
+        <input name="password" type="password" autocomplete="current-password" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100" required />
+      </div>
+      <button type="submit" class="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">Sign in</button>
+    </form>
+  </div>
+  <script>
+    const p = new URLSearchParams(location.search);
+    const next = p.get('next') && p.get('next').length ? p.get('next') : '/index.html';
+    document.getElementById('f').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById('msg');
+      msg.textContent = '';
+      const fd = new FormData(e.target);
+      const username = fd.get('username');
+      const password = fd.get('password');
+      try {
+        const r = await fetch('/api/dashboard/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          msg.textContent = data.error || r.status + ' ' + r.statusText;
+          return;
+        }
+        location.href = next;
+      } catch (err) {
+        msg.textContent = String(err);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+# From repo root: docker compose -f dashboard/docker-compose.yml up
+# Or: cd dashboard && docker compose up
+services:
+  api:
+    build: ./backend
+    env_file:
+      - ../.env
+    environment:
+      DASHBOARD_API_HOST: 0.0.0.0
+      NANOCLAW_DATA_DIR: /nanoclaw/data
+      NANOCLAW_LOG_PATH: /nanoclaw/logs/nanoclaw.log
+      NANOCLAW_GROUPS_DIR: /nanoclaw/groups
+      DASHBOARD_SQLITE_PATH: /dashboard/data/app.sqlite
+    volumes:
+      - ../data:/nanoclaw/data:ro
+      - ../logs:/nanoclaw/logs:ro
+      - ../groups:/nanoclaw/groups:ro
+      # Bind mount: SQLite and other dashboard state live on the host at dashboard/data/
+      # (survives container recreate, compose down, and matches DASHBOARD_SQLITE_PATH in .env).
+      - ./data:/dashboard/data
+    ports:
+      - "3002:3002"
+
+  web:
+    build: ./frontend
+    depends_on:
+      - api
+    ports:
+      - "8080:80"

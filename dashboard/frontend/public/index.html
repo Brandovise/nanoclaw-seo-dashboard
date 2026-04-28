@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NanoClaw Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body class="flex h-screen overflow-hidden">
+
+<!-- Mobile hamburger -->
+<button class="hamburger" id="hamburger" onclick="toggleSidebar()">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- Sidebar -->
+<aside class="w-56 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col overflow-y-auto" id="sidebar">
+  <div class="p-4 border-b border-slate-800">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">N</div>
+      <div>
+        <div class="font-semibold text-slate-200 text-sm">NanoClaw</div>
+        <div class="flex items-center gap-1 mt-0.5">
+          <span class="dot dot-green" id="conn-dot"></span>
+          <span class="text-xs text-slate-500" id="conn-status">connecting…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav class="p-2 flex-1">
+    <div class="sidebar-link active" onclick="navigate('overview')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Overview
+    </div>
+    <div class="sidebar-link" onclick="navigate('messages')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Messages
+    </div>
+    <div class="sidebar-link" onclick="navigate('tasks')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Tasks &amp; Crons
+    </div>
+    <div class="sidebar-link" onclick="navigate('agents')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      Agents
+    </div>
+    <div class="sidebar-link" onclick="navigate('logs')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      Logs
+    </div>
+    <div class="sidebar-link" onclick="navigate('groups')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Groups
+    </div>
+    <div class="sidebar-link" onclick="navigate('skills')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      Skills
+    </div>
+    <div class="sidebar-link" onclick="navigate('tokens')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+      AI Usage
+    </div>
+    <div class="mt-2 pt-2 border-t border-slate-800"><a href="/blog.html" class="sidebar-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>Blog Dashboard</a></div>
+    <div class="mt-1"><a href="#" class="sidebar-link" data-section="system-graph" onclick="navigate('system-graph')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="9" y="15" width="6" height="6" rx="1"/><line x1="5" y1="9" x2="5" y2="15"/><line x1="19" y1="9" x2="19" y2="15"/><line x1="5" y1="15" x2="9" y2="18"/><line x1="19" y1="15" x2="15" y2="18"/></svg>System Graph</a></div>
+    <div class="mt-1"><a href="/graph.html" target="_blank" class="sidebar-link" id="graph-nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="3" cy="5" r="2"/><circle cx="21" cy="5" r="2"/><circle cx="3" cy="19" r="2"/><circle cx="21" cy="19" r="2"/><line x1="5" y1="5" x2="10" y2="11"/><line x1="19" y1="5" x2="14" y2="11"/><line x1="5" y1="19" x2="10" y2="13"/><line x1="19" y1="19" x2="14" y2="13"/></svg>Code Graph <span id="graph-updated-badge" style="display:none;background:#22c55e;color:#fff;font-size:10px;padding:1px 5px;border-radius:8px;margin-left:4px;">updated</span></a></div>
+  </nav>
+  <div class="p-3 border-t border-slate-800">
+    <div class="text-xs text-slate-600">Auto-refresh: <span id="refresh-status">on</span></div>
+  </div>
+</aside>
+
+<!-- Main Content -->
+<main class="flex-1 overflow-y-auto">
+
+  <!-- Overview Section -->
+  <div id="section-overview" class="section active p-6">
+    <h1 class="text-xl font-bold text-slate-100 mb-6">Overview</h1>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="stat-cards">
+      <div class="card"><div class="stat-value" id="stat-messages">—</div><div class="stat-label">Messages today</div></div>
+      <div class="card"><div class="stat-value" id="stat-replies">—</div><div class="stat-label">Replies today</div></div>
+      <div class="card"><div class="stat-value" id="stat-tasks">—</div><div class="stat-label">Active tasks</div></div>
+      <div class="card"><div class="stat-value" id="stat-agents">—</div><div class="stat-label">Active agents</div></div>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Recent Messages</h2>
+        <div id="recent-messages">Loading…</div>
+      </div>
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Recent Task Runs</h2>
+        <div id="recent-task-runs">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Messages Section -->
+  <div id="section-messages" class="section p-6">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-xl font-bold text-slate-100">Messages</h1>
+      <div class="flex gap-2 flex-wrap">
+        <select id="msg-group-filter" onchange="loadMessages()" style="width:200px">
+          <option value="">All chats</option>
+        </select>
+        <select id="msg-type-filter" onchange="loadMessages()">
+          <option value="all">All</option>
+          <option value="user">User only</option>
+          <option value="bot">Bot replies</option>
+        </select>
+        <input id="msg-search" type="text" placeholder="Search…" oninput="debounce(loadMessages, 400)()" style="width:160px">
+      </div>
+    </div>
+    <div class="card p-0 overflow-hidden">
+      <table>
+        <thead><tr>
+          <th style="width:140px">Time</th>
+          <th style="width:120px">Chat</th>
+          <th style="width:90px">Sender</th>
+          <th>Message</th>
+          <th style="width:50px">Type</th>
+        </tr></thead>
+        <tbody id="messages-tbody"><tr><td colspan="5" class="text-center text-slate-500 py-8">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="flex items-center justify-between mt-4">
+      <span class="text-sm text-slate-500" id="msg-count"></span>
+      <div class="flex gap-2">
+        <button class="btn btn-primary btn-sm" onclick="msgPrev()" id="msg-prev-btn" disabled>← Prev</button>
+        <button class="btn btn-primary btn-sm" onclick="msgNext()" id="msg-next-btn" disabled>Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tasks Section -->
+  <div id="section-tasks" class="section p-6">
+    <h1 class="text-xl font-bold text-slate-100 mb-6">Tasks &amp; Crons</h1>
+    <div class="card p-0 overflow-hidden mb-6">
+      <table>
+        <thead><tr>
+          <th>ID</th>
+          <th>Group</th>
+          <th>Prompt</th>
+          <th>Schedule</th>
+          <th>Status</th>
+          <th>Next Run</th>
+          <th>Last Run</th>
+        </tr></thead>
+        <tbody id="tasks-tbody"><tr><td colspan="7" class="text-center text-slate-500 py-8">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Recent Executions</h2>
+      <div id="task-logs-container">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Agents Section -->
+  <div id="section-agents" class="section p-6">
+    <h1 class="text-xl font-bold text-slate-100 mb-6">Agents</h1>
+    <div class="grid grid-cols-3 gap-4 mb-6">
+      <div class="card">
+        <div class="stat-value text-green-400" id="agent-active-count">0</div>
+        <div class="stat-label">Active containers</div>
+      </div>
+      <div class="card">
+        <div class="stat-value text-yellow-400" id="agent-waiting-count">0</div>
+        <div class="stat-label">Waiting in queue</div>
+      </div>
+      <div class="card">
+        <div class="stat-value text-slate-400" id="agent-max-count">5</div>
+        <div class="stat-label">Max concurrent</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Active Containers</h2>
+      <div id="active-agents-list">No active containers</div>
+    </div>
+  </div>
+
+  <!-- Logs Section -->
+  <div id="section-logs" class="section p-6">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-xl font-bold text-slate-100">Logs</h1>
+      <div class="flex gap-2 items-center">
+        <select id="log-source" onchange="loadLogs()">
+          <option value="main">nanoclaw.log</option>
+          <option value="error">nanoclaw.error.log</option>
+          <option value="setup">setup.log</option>
+          <option value="container">Container logs</option>
+        </select>
+        <select id="log-group" onchange="loadContainerLogs()" style="display:none;width:160px">
+          <option value="main">main</option>
+        </select>
+        <select id="log-file" onchange="loadContainerLogFile()" style="display:none;width:200px">
+        </select>
+        <input type="number" id="log-lines" value="200" min="50" max="500" style="width:80px" onchange="loadLogs()" title="Lines">
+        <button class="btn btn-primary btn-sm" onclick="loadLogs()">Refresh</button>
+        <label class="flex items-center gap-1 text-sm text-slate-400 cursor-pointer">
+          <input type="checkbox" id="log-autorefresh" checked onchange="toggleLogAutoRefresh()"> Auto
+        </label>
+      </div>
+    </div>
+    <div id="log-container">
+      <div class="log-line text-slate-600">Loading logs…</div>
+    </div>
+  </div>
+
+  <!-- Groups Section -->
+  <div id="section-groups" class="section p-6">
+    <h1 class="text-xl font-bold text-slate-100 mb-6">Groups</h1>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Registered Groups</h2>
+        <div id="registered-groups-list">Loading…</div>
+      </div>
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">All Chats</h2>
+        <div id="all-chats-list" style="max-height:400px;overflow-y:auto">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Usage + Quotas (combined) -->
+  <div id="section-tokens" class="section p-6">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-xl font-bold text-slate-100">AI Usage &amp; Quotas</h1>
+        <p class="text-sm text-slate-500 mt-1">Live rate-limit quotas · token spend · billing breakdown</p>
+      </div>
+      <div class="flex gap-2 items-center">
+        <select id="token-period" onchange="loadTokens()">
+          <option value="month">This month</option>
+          <option value="week">Last 7 days</option>
+          <option value="today">Today</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="loadTokens(); loadQuota()">Refresh</button>
+      </div>
+    </div>
+
+    <!-- Provider quota cards -->
+    <div class="mb-2 flex items-center justify-between">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Provider Quotas</h2>
+      <p class="text-xs text-slate-600">Rate % only if a vendor exposes it; usage/cost below is from local logs. Cached 5 min · <span id="quota-cached-at">—</span></p>
+    </div>
+    <div id="quota-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-6">
+      <div class="card text-slate-500 text-sm col-span-full">Loading…</div>
+    </div>
+
+    <!-- Cost stat cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="card">
+        <div class="stat-value text-indigo-400 text-2xl" id="tok-total-cost">—</div>
+        <div class="stat-label">Est. total cost</div>
+      </div>
+      <div class="card">
+        <div class="stat-value text-blue-400 text-2xl" id="tok-total-input">—</div>
+        <div class="stat-label">Input tokens</div>
+      </div>
+      <div class="card">
+        <div class="stat-value text-purple-400 text-2xl" id="tok-total-output">—</div>
+        <div class="stat-label">Output tokens</div>
+      </div>
+      <div class="card">
+        <div class="stat-value text-green-400 text-2xl" id="tok-cache-savings">—</div>
+        <div class="stat-label">Cache read tokens</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">By Model</h2>
+        <div id="tok-by-model">Loading…</div>
+      </div>
+      <div class="card">
+        <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">By Agent / Project</h2>
+        <div id="tok-by-agent">Loading…</div>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Daily Breakdown</h2>
+      <div id="tok-daily" style="overflow-x:auto">Loading…</div>
+    </div>
+
+    <div class="card mb-4">
+      <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Agent × Model Detail</h2>
+      <div id="tok-agent-model" style="overflow-x:auto">Loading…</div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="card">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Anthropic Billing API</h2>
+          <span class="badge badge-gray" id="tok-anthropic-status">checking…</span>
+        </div>
+        <div id="tok-anthropic">Loading…</div>
+      </div>
+      <div class="card">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">OpenAI Billing API</h2>
+          <span class="badge badge-gray" id="tok-openai-status">checking…</span>
+        </div>
+        <div id="tok-openai">Loading…</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Skills Section -->
+  <div id="section-skills" class="section p-6">
+    <h1 class="text-xl font-bold text-slate-100 mb-6">Skills</h1>
+    <div id="skills-list">Loading…</div>
+  </div>
+
+  <!-- System Graph Section -->
+  <div id="section-system-graph" class="section p-6">
+    <h2 class="section-title">System Architecture</h2>
+    <p style="color:#94a3b8;font-size:13px;margin-bottom:16px;">Live view of channels, groups, crons and blog automation — how everything connects.</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;" id="sg-legend"></div>
+    <div id="sg-container" style="background:#0f172a;border-radius:12px;border:1px solid #1e293b;height:600px;position:relative;">
+      <canvas id="sg-canvas" style="width:100%;height:100%;"></canvas>
+    </div>
+    <div id="sg-node-info" style="margin-top:12px;padding:12px;background:#1e293b;border-radius:8px;display:none;">
+      <div id="sg-node-title" style="font-weight:600;color:#f1f5f9;margin-bottom:4px;"></div>
+      <div id="sg-node-desc" style="color:#94a3b8;font-size:13px;"></div>
+      <div id="sg-node-meta" style="color:#64748b;font-size:12px;margin-top:4px;"></div>
+    </div>
+  </div>
+
+</main>
+
+<script src="shared.js"></script>
+<script>
+// ============================================================
+// State
+// ============================================================
+let currentSection = 'overview';
+let msgOffset = 0;
+let msgLimit = 50;
+let msgTotal = 0;
+let logAutoRefresh = true;
+let logRefreshTimer = null;
+let sseSource = null;
+let sseConnected = false;
+
+// ============================================================
+// Navigation
+// ============================================================
+function navigate(section) {
+  // Close sidebar on mobile
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('open');
+  }
+  document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('section-' + section).classList.add('active');
+  currentSection = section;
+
+  // Load section data
+  if (section === 'overview') loadOverview();
+  else if (section === 'messages') { populateChatFilter(); loadMessages(); }
+  else if (section === 'tasks') loadTasks();
+  else if (section === 'agents') loadAgents();
+  else if (section === 'logs') loadLogs();
+  else if (section === 'groups') loadGroups();
+  else if (section === 'skills') loadSkills();
+  else if (section === 'tokens') { loadTokens(); loadQuota(); }
+  else if (section === 'system-graph') loadSystemGraph();
+}
+
+// ============================================================
+// Overview
+// ============================================================
+async function loadOverview() {
+  try {
+    const [stats, msgs, taskLogs] = await Promise.all([
+      api('/api/stats'),
+      api('/api/messages?limit=8'),
+      api('/api/task-logs?limit=8'),
+    ]);
+
+    document.getElementById('stat-messages').textContent = stats.messagesToday;
+    document.getElementById('stat-replies').textContent = stats.repliesToday;
+    document.getElementById('stat-tasks').textContent = stats.activeTasks;
+    document.getElementById('stat-agents').textContent = stats.activeAgents + '/' + stats.maxAgents;
+
+    // Recent messages
+    const rmEl = document.getElementById('recent-messages');
+    if (!msgs.messages.length) { rmEl.innerHTML = '<p class="text-slate-500 text-sm">No messages yet.</p>'; }
+    else {
+      rmEl.innerHTML = msgs.messages.map(m => `
+        <div class="flex gap-3 py-2 border-b border-slate-800 last:border-0">
+          <div class="flex-shrink-0 text-lg">${channelIcon(m.channel)}</div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-medium text-slate-300">${escHtml(m.chat_name || m.chat_jid)}</span>
+              ${m.is_bot_message ? '<span class="badge badge-blue">bot</span>' : ''}
+              <span class="text-xs text-slate-600 ml-auto">${fmtTime(m.timestamp)}</span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5 truncate">${escHtml(truncate(m.content, 80))}</p>
+          </div>
+        </div>`).join('');
+    }
+
+    // Recent task runs
+    const rtEl = document.getElementById('recent-task-runs');
+    if (!taskLogs.logs.length) { rtEl.innerHTML = '<p class="text-slate-500 text-sm">No task runs yet.</p>'; }
+    else {
+      rtEl.innerHTML = taskLogs.logs.map(l => `
+        <div class="flex items-center gap-3 py-2 border-b border-slate-800 last:border-0">
+          <div>${statusBadge(l.status)}</div>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs text-slate-300 truncate">${escHtml(truncate(l.prompt || l.task_id, 60))}</p>
+            <p class="text-xs text-slate-600">${l.group_folder || ''} · ${fmtDuration(l.duration_ms)}</p>
+          </div>
+          <span class="text-xs text-slate-600 flex-shrink-0">${fmtTime(l.run_at)}</span>
+        </div>`).join('');
+    }
+  } catch(e) {
+    console.error('Overview error:', e);
+  }
+}
+
+// ============================================================
+// Messages
+// ============================================================
+async function populateChatFilter() {
+  try {
+    const data = await api('/api/chats');
+    const sel = document.getElementById('msg-group-filter');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">All chats</option>' +
+      data.chats.filter(c => c.jid !== '__group_sync__').map(c =>
+        `<option value="${escHtml(c.jid)}" ${c.jid===cur?'selected':''}>${channelIcon(c.channel)} ${escHtml(c.name || c.jid)}</option>`
+      ).join('');
+  } catch(e) {}
+}
+
+async function loadMessages() {
+  const group = document.getElementById('msg-group-filter').value;
+  const type = document.getElementById('msg-type-filter').value;
+  const search = document.getElementById('msg-search').value;
+  const params = new URLSearchParams({ limit: msgLimit, offset: msgOffset });
+  if (group) params.set('group', group);
+  if (type !== 'all') params.set('type', type);
+  if (search) params.set('search', search);
+
+  const tbody = document.getElementById('messages-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="text-center text-slate-500 py-4">Loading…</td></tr>';
+
+  try {
+    const data = await api('/api/messages?' + params);
+    msgTotal = data.total;
+
+    document.getElementById('msg-count').textContent =
+      `${msgOffset + 1}–${Math.min(msgOffset + msgLimit, msgTotal)} of ${msgTotal}`;
+    document.getElementById('msg-prev-btn').disabled = msgOffset === 0;
+    document.getElementById('msg-next-btn').disabled = msgOffset + msgLimit >= msgTotal;
+
+    if (!data.messages.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-slate-500 py-8">No messages found.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.messages.map(m => `
+      <tr class="expandable" onclick="toggleMsgExpand(this)">
+        <td class="text-slate-500 text-xs whitespace-nowrap">${fmtTime(m.timestamp)}</td>
+        <td>
+          <div class="flex items-center gap-1">
+            <span class="text-base">${channelIcon(m.channel)}</span>
+            <span class="text-xs text-slate-300 truncate" style="max-width:100px" title="${escHtml(m.chat_jid)}">${escHtml(m.chat_name || m.chat_jid)}</span>
+          </div>
+        </td>
+        <td class="text-xs text-slate-400">${escHtml(m.sender_name || m.sender || '—')}</td>
+        <td>
+          <span class="text-slate-300 text-xs">${escHtml(truncate(m.content, 120))}</span>
+          <div class="expanded-content text-xs"><pre class="text-slate-300">${escHtml(m.content)}</pre></div>
+        </td>
+        <td>${m.is_bot_message ? '<span class="badge badge-blue">bot</span>' : m.is_from_me ? '<span class="badge badge-green">me</span>' : '<span class="badge badge-gray">user</span>'}</td>
+      </tr>`).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-red-400 py-4">${escHtml(String(e))}</td></tr>`;
+  }
+}
+
+function toggleMsgExpand(row) {
+  const ec = row.querySelector('.expanded-content');
+  if (ec) ec.classList.toggle('open');
+}
+
+function msgPrev() { if (msgOffset > 0) { msgOffset -= msgLimit; loadMessages(); } }
+function msgNext() { if (msgOffset + msgLimit < msgTotal) { msgOffset += msgLimit; loadMessages(); } }
+
+// ============================================================
+// Tasks
+// ============================================================
+async function loadTasks() {
+  try {
+    const [tasks, logs] = await Promise.all([
+      api('/api/tasks'),
+      api('/api/task-logs?limit=20'),
+    ]);
+
+    const tbody = document.getElementById('tasks-tbody');
+    if (!tasks.tasks.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-slate-500 py-8">No tasks configured.</td></tr>';
+    } else {
+      tbody.innerHTML = tasks.tasks.map(t => `
+        <tr class="expandable" onclick="loadTaskDetail('${escHtml(t.id)}', this)">
+          <td class="font-mono text-xs text-slate-500">${escHtml(t.id.slice(0,12))}…</td>
+          <td class="text-xs">${escHtml(t.group_folder)}</td>
+          <td class="text-xs text-slate-300">${escHtml(truncate(t.prompt, 60))}</td>
+          <td>
+            <span class="badge badge-gray text-xs">${escHtml(t.schedule_type)}</span>
+            <div class="text-xs text-slate-500 mt-1 font-mono">${escHtml(t.schedule_value)}</div>
+          </td>
+          <td>${statusBadge(t.status)}</td>
+          <td class="text-xs text-slate-400">${fmtTime(t.next_run)}</td>
+          <td class="text-xs text-slate-400">${fmtTime(t.last_run)}</td>
+        </tr>
+        <tr><td colspan="7" class="p-0">
+          <div class="expanded-content" id="task-detail-${escHtml(t.id)}"></div>
+        </td></tr>`).join('');
+    }
+
+    // Recent task run logs
+    const logsEl = document.getElementById('task-logs-container');
+    if (!logs.logs.length) {
+      logsEl.innerHTML = '<p class="text-slate-500 text-sm">No task executions yet.</p>';
+    } else {
+      logsEl.innerHTML = `
+        <table>
+          <thead><tr><th>Task</th><th>Group</th><th>Status</th><th>Duration</th><th>Time</th><th>Result</th></tr></thead>
+          <tbody>${logs.logs.map(l => `
+            <tr>
+              <td class="font-mono text-xs text-slate-500">${escHtml((l.task_id||'').slice(0,10))}…</td>
+              <td class="text-xs">${escHtml(l.group_folder||'—')}</td>
+              <td>${statusBadge(l.status)}</td>
+              <td class="text-xs text-slate-400">${fmtDuration(l.duration_ms)}</td>
+              <td class="text-xs text-slate-400">${fmtTime(l.run_at)}</td>
+              <td class="text-xs text-slate-400 max-w-xs truncate">${escHtml(truncate(l.result || l.error || '', 80))}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`;
+    }
+  } catch(e) {
+    console.error('Tasks error:', e);
+  }
+}
+
+async function loadTaskDetail(taskId, row) {
+  const detailEl = document.getElementById('task-detail-' + taskId);
+  if (detailEl.classList.toggle('open')) {
+    try {
+      const data = await api('/api/task-logs?taskId=' + encodeURIComponent(taskId) + '&limit=10');
+      detailEl.innerHTML = `
+        <div class="p-4">
+          <h3 class="text-xs font-semibold text-slate-400 mb-3 uppercase">Last 10 Executions</h3>
+          ${!data.logs.length ? '<p class="text-slate-500 text-xs">No executions yet.</p>' :
+          `<table><thead><tr><th>Status</th><th>Duration</th><th>Time</th><th>Result</th></tr></thead>
+          <tbody>${data.logs.map(l => `<tr>
+            <td>${statusBadge(l.status)}</td>
+            <td class="text-xs">${fmtDuration(l.duration_ms)}</td>
+            <td class="text-xs">${fmtTime(l.run_at)}</td>
+            <td class="text-xs max-w-xs"><pre class="text-slate-400 text-xs">${escHtml(truncate(l.result || l.error || '', 200))}</pre></td>
+          </tr>`).join('')}</tbody></table>`}
+        </div>`;
+    } catch(e) {
+      detailEl.innerHTML = `<p class="text-red-400 text-xs p-4">${escHtml(String(e))}</p>`;
+    }
+  }
+}
+
+// ============================================================
+// Agents
+// ============================================================
+async function loadAgents() {
+  try {
+    const data = await api('/api/agents');
+    const registered = Array.isArray(data.registered) ? data.registered : [];
+    const runningRegistered = registered.filter(a => a.status === 'running').length;
+    const derivedActive = Math.max(
+      (Array.isArray(data.active) ? data.active.length : 0),
+      Number(data.stats?.activeCount || 0),
+      runningRegistered,
+    );
+    document.getElementById('agent-active-count').textContent = derivedActive;
+    document.getElementById('agent-waiting-count').textContent = data.stats.waitingCount;
+    document.getElementById('agent-max-count').textContent = data.stats.maxConcurrent;
+
+    const el = document.getElementById('active-agents-list');
+    if (!data.active.length) {
+      if (!registered.length) {
+        el.innerHTML = '<p class="text-slate-500 text-sm flex items-center gap-2"><span class="dot dot-gray" style="background:#475569"></span> No active containers right now.</p>';
+      } else {
+        el.innerHTML = registered.map(a => `
+          <div class="flex items-center gap-3 py-3 border-b border-slate-800 last:border-0">
+            <span class="dot ${a.status === 'running' ? 'dot-green' : 'dot-gray'}"></span>
+            <div>
+              <div class="font-medium text-sm text-slate-200">${escHtml(a.name || a.folder || a.id)}</div>
+              <div class="text-xs text-slate-500 mt-0.5">
+                <span class="badge ${a.status === 'running' ? 'badge-green' : 'badge-gray'} mr-1">${escHtml(a.status)}</span>
+                ${a.lastActive ? 'Last active: ' + escHtml(fmtTime(a.lastActive)) : 'No activity yet'}
+              </div>
+            </div>
+          </div>`).join('');
+      }
+    } else {
+      el.innerHTML = data.active.map(a => `
+        <div class="flex items-center gap-3 py-3 border-b border-slate-800 last:border-0">
+          <span class="dot dot-green"></span>
+          <div>
+            <div class="font-medium text-sm text-slate-200">${escHtml(a.groupFolder || a.groupJid)}</div>
+            <div class="text-xs text-slate-500 mt-0.5">
+              ${a.isTaskContainer ? '<span class="badge badge-blue mr-1">task</span>' : '<span class="badge badge-green mr-1">message</span>'}
+              Container: <span class="font-mono">${escHtml(a.containerName || 'starting…')}</span>
+              ${a.runningTaskId ? ' · Task: <span class="font-mono">' + escHtml(a.runningTaskId.slice(0,12)) + '…</span>' : ''}
+            </div>
+          </div>
+        </div>`).join('');
+    }
+  } catch(e) {
+    console.error('Agents error:', e);
+  }
+}
+
+// ============================================================
+// Logs
+// ============================================================
+let logAutoRefreshTimer = null;
+
+function toggleLogAutoRefresh() {
+  logAutoRefresh = document.getElementById('log-autorefresh').checked;
+  if (logAutoRefresh) scheduleLogRefresh();
+  else { clearTimeout(logAutoRefreshTimer); }
+}
+
+function scheduleLogRefresh() {
+  clearTimeout(logAutoRefreshTimer);
+  if (logAutoRefresh && currentSection === 'logs') {
+    logAutoRefreshTimer = setTimeout(() => { loadLogs(); }, 5000);
+  }
+}
+
+async function loadLogs() {
+  clearTimeout(logAutoRefreshTimer);
+  const source = document.getElementById('log-source').value;
+  const groupSel = document.getElementById('log-group');
+  const fileSel = document.getElementById('log-file');
+
+  if (source === 'container') {
+    groupSel.style.display = 'inline-block';
+    await loadContainerLogs();
+    return;
+  }
+  groupSel.style.display = 'none';
+  fileSel.style.display = 'none';
+
+  const lines = document.getElementById('log-lines').value;
+  try {
+    const data = await api('/api/logs?file=' + source + '&lines=' + lines);
+    renderLogs(data.lines);
+  } catch(e) {
+    renderLogs(['Error: ' + e]);
+  }
+  scheduleLogRefresh();
+}
+
+async function loadContainerLogs() {
+  const group = document.getElementById('log-group').value;
+  const fileSel = document.getElementById('log-file');
+  try {
+    const data = await api('/api/container-logs?group=' + encodeURIComponent(group));
+    fileSel.innerHTML = data.files.map(f => `<option value="${escHtml(f)}">${escHtml(f)}</option>`).join('');
+    if (data.files.length) {
+      fileSel.style.display = 'inline-block';
+      await loadContainerLogFile();
+    } else {
+      fileSel.style.display = 'none';
+      renderLogs(['No container log files found for group: ' + group]);
+    }
+  } catch(e) {
+    renderLogs(['Error: ' + e]);
+  }
+}
+
+async function loadContainerLogFile() {
+  const group = document.getElementById('log-group').value;
+  const logFile = document.getElementById('log-file').value;
+  const lines = document.getElementById('log-lines').value;
+  if (!logFile) return;
+  try {
+    const data = await api('/api/container-logs?group=' + encodeURIComponent(group) + '&logFile=' + encodeURIComponent(logFile) + '&lines=' + lines);
+    renderLogs(data.lines);
+  } catch(e) {
+    renderLogs(['Error: ' + e]);
+  }
+}
+
+function renderLogs(lines) {
+  const container = document.getElementById('log-container');
+  const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+
+  container.innerHTML = lines.map(l => {
+    let cls = 'log-line info';
+    const lc = l.toLowerCase();
+    if (lc.includes('"level":50') || lc.includes('"level":60') || lc.includes('error') || lc.includes('fatal')) cls = 'log-line error';
+    else if (lc.includes('"level":40') || lc.includes('warn')) cls = 'log-line warn';
+    return `<div class="${cls}">${escHtml(l)}</div>`;
+  }).join('') || '<div class="log-line text-slate-600">No log entries found.</div>';
+
+  if (wasAtBottom) container.scrollTop = container.scrollHeight;
+}
+
+// ============================================================
+// Groups
+// ============================================================
+async function loadGroups() {
+  try {
+    const data = await api('/api/groups');
+
+    // Registered groups
+    const rgEl = document.getElementById('registered-groups-list');
+    if (!data.registered.length) {
+      rgEl.innerHTML = '<p class="text-slate-500 text-sm">No registered groups.</p>';
+    } else {
+      rgEl.innerHTML = data.registered.map(g => `
+        <div class="py-3 border-b border-slate-800 last:border-0">
+          <div class="flex items-center gap-2">
+            ${g.is_main ? '<span class="badge badge-green">main</span>' : ''}
+            <span class="font-medium text-slate-200 text-sm">${escHtml(g.name)}</span>
+          </div>
+          <div class="text-xs text-slate-500 mt-1 space-y-0.5">
+            <div>Folder: <span class="font-mono text-slate-400">${escHtml(g.folder)}</span></div>
+            <div>JID: <span class="font-mono text-slate-400 text-xs">${escHtml(g.jid)}</span></div>
+            <div>Trigger: <span class="font-mono text-slate-400">${escHtml(g.trigger_pattern)}</span></div>
+            ${g.skills.length ? `<div>Skills: ${g.skills.map(s => `<span class="badge badge-blue mr-1">${escHtml(s)}</span>`).join('')}</div>` : ''}
+          </div>
+        </div>`).join('');
+    }
+
+    // All chats
+    const acEl = document.getElementById('all-chats-list');
+    if (!data.chats.length) {
+      acEl.innerHTML = '<p class="text-slate-500 text-sm">No chats found.</p>';
+    } else {
+      acEl.innerHTML = data.chats.filter(c => c.jid !== '__group_sync__').map(c => `
+        <div class="flex items-center gap-2 py-2 border-b border-slate-800 last:border-0">
+          <span class="text-base flex-shrink-0">${channelIcon(c.channel)}</span>
+          <div class="min-w-0">
+            <div class="text-sm text-slate-300 truncate">${escHtml(c.name || c.jid)}</div>
+            <div class="text-xs text-slate-600">${fmtTime(c.last_message_time)}</div>
+          </div>
+          ${c.is_group ? '<span class="badge badge-gray ml-auto flex-shrink-0">group</span>' : ''}
+        </div>`).join('');
+    }
+  } catch(e) {
+    console.error('Groups error:', e);
+  }
+}
+
+// ============================================================
+// Skills
+// ============================================================
+async function loadSkills() {
+  try {
+    const data = await api('/api/groups');
+    const el = document.getElementById('skills-list');
+    const allSkills = new Map();
+
+    for (const g of data.registered) {
+      for (const s of (g.skills || [])) {
+        if (!allSkills.has(s)) allSkills.set(s, []);
+        allSkills.get(s).push(g.folder);
+      }
+    }
+
+    if (!allSkills.size) {
+      el.innerHTML = '<div class="card"><p class="text-slate-500">No skills found. Container skills are in data/sessions/{group}/.claude/skills/</p></div>';
+      return;
+    }
+
+    el.innerHTML = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">' +
+      [...allSkills.entries()].map(([name, groups]) => `
+        <div class="card">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-lg">⚡</span>
+            <span class="font-medium text-slate-200">${escHtml(name)}</span>
+          </div>
+          <div class="text-xs text-slate-500">Available in: ${groups.map(g => `<span class="badge badge-blue mr-1">${escHtml(g)}</span>`).join('')}</div>
+        </div>`).join('') + '</div>';
+  } catch(e) {
+    console.error('Skills error:', e);
+  }
+}
+
+// ============================================================
+// System Graph
+// ============================================================
+let sgGraph = null;
+let sgData = null;
+
+async function loadSystemGraph() {
+  sgData = await api('/api/system-graph');
+  sgRender(sgData);
+}
+
+function sgRender(data) {
+  const canvas = document.getElementById('sg-canvas');
+  const container = document.getElementById('sg-container');
+  canvas.width = container.offsetWidth;
+  canvas.height = container.offsetHeight;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const TYPE_COLOR = {
+    hub:     '#6366f1',
+    channel: '#8b5cf6',
+    group:   '#22c55e',
+    cron:    '#f59e0b',
+    blog:    '#ef4444',
+  };
+  const TYPE_LABEL = {
+    hub: 'Hub', channel: 'Channel', group: 'Group', cron: 'Cron Task', blog: 'Blog Automation'
+  };
+
+  // Legend
+  const legend = document.getElementById('sg-legend');
+  legend.innerHTML = Object.entries(TYPE_COLOR).map(([t, c]) =>
+    `<span style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8">
+      <span style="width:12px;height:12px;border-radius:50%;background:${c};display:inline-block"></span>${TYPE_LABEL[t]}
+    </span>`
+  ).join('');
+
+  // Simple force layout
+  const nodes = data.nodes.map((n, i) => ({
+    ...n,
+    x: W/2 + Math.cos(i / data.nodes.length * Math.PI * 2) * 200,
+    y: H/2 + Math.sin(i / data.nodes.length * Math.PI * 2) * 200,
+    vx: 0, vy: 0, r: n.type === 'hub' ? 22 : n.type === 'channel' ? 18 : 14,
+  }));
+  const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
+
+  // Position hub at center
+  const hub = nodes.find(n => n.type === 'hub');
+  if (hub) { hub.x = W/2; hub.y = H/2; hub.fixed = true; }
+
+  // Position channels around hub
+  const channels = nodes.filter(n => n.type === 'channel');
+  channels.forEach((n, i) => {
+    n.x = W/2 + Math.cos((i / channels.length) * Math.PI * 2) * 100;
+    n.y = H/2 + Math.sin((i / channels.length) * Math.PI * 2) * 100;
+  });
+
+  let animFrame = null;
+  function simulate() {
+    for (let iter = 0; iter < 5; iter++) {
+      // Repulsion
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i+1; j < nodes.length; j++) {
+          const a = nodes[i], b = nodes[j];
+          const dx = b.x - a.x, dy = b.y - a.y;
+          const d = Math.sqrt(dx*dx + dy*dy) || 1;
+          const f = 3000 / (d * d);
+          if (!a.fixed) { a.vx -= dx/d*f; a.vy -= dy/d*f; }
+          if (!b.fixed) { b.vx += dx/d*f; b.vy += dy/d*f; }
+        }
+      }
+      // Attraction along edges
+      for (const e of data.edges) {
+        const a = nodeMap[e.source], b = nodeMap[e.target];
+        if (!a || !b) continue;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.sqrt(dx*dx + dy*dy) || 1;
+        const idealDist = 140;
+        const f = (d - idealDist) * 0.03;
+        if (!a.fixed) { a.vx += dx/d*f; a.vy += dy/d*f; }
+        if (!b.fixed) { b.vx -= dx/d*f; b.vy -= dy/d*f; }
+      }
+      // Dampen + apply
+      for (const n of nodes) {
+        if (n.fixed) continue;
+        n.vx *= 0.8; n.vy *= 0.8;
+        n.x = Math.max(n.r+10, Math.min(W-n.r-10, n.x + n.vx));
+        n.y = Math.max(n.r+10, Math.min(H-n.r-10, n.y + n.vy));
+      }
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    // Edges
+    for (const e of data.edges) {
+      const a = nodeMap[e.source], b = nodeMap[e.target];
+      if (!a || !b) continue;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Arrow
+      const angle = Math.atan2(b.y - a.y, b.x - a.x);
+      const ax = b.x - Math.cos(angle) * (b.r + 6);
+      const ay = b.y - Math.sin(angle) * (b.r + 6);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - Math.cos(angle-0.4)*8, ay - Math.sin(angle-0.4)*8);
+      ctx.lineTo(ax - Math.cos(angle+0.4)*8, ay - Math.sin(angle+0.4)*8);
+      ctx.closePath();
+      ctx.fillStyle = '#475569';
+      ctx.fill();
+    }
+    // Nodes
+    for (const n of nodes) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
+      ctx.fillStyle = TYPE_COLOR[n.type] || '#64748b';
+      ctx.fill();
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Label
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = `${n.type === 'hub' ? 11 : 10}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const lines = n.label.length > 14 ? [n.label.slice(0,14), n.label.slice(14)] : [n.label];
+      lines.forEach((l, i) => ctx.fillText(l, n.x, n.y + (i - (lines.length-1)/2) * 11));
+    }
+  }
+
+  let ticks = 0;
+  function tick() {
+    simulate();
+    draw();
+    if (++ticks < 200) animFrame = requestAnimationFrame(tick);
+    else draw(); // final static draw
+  }
+  if (animFrame) cancelAnimationFrame(animFrame);
+  ticks = 0;
+  tick();
+
+  // Click to inspect
+  canvas.onclick = (ev) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (ev.clientX - rect.left) * (W / rect.width);
+    const my = (ev.clientY - rect.top) * (H / rect.height);
+    const hit = nodes.find(n => Math.hypot(n.x - mx, n.y - my) < n.r + 4);
+    const info = document.getElementById('sg-node-info');
+    if (hit) {
+      document.getElementById('sg-node-title').textContent = hit.label;
+      document.getElementById('sg-node-desc').textContent = hit.description || '';
+      document.getElementById('sg-node-meta').textContent = hit.schedule ? `Schedule: ${hit.schedule}` : hit.folder ? `Folder: ${hit.folder}` : '';
+      info.style.display = 'block';
+    } else {
+      info.style.display = 'none';
+    }
+  };
+}
+
+// ============================================================
+// Token Usage
+// ============================================================
+function summarizeBillingForUsage(anthropic, openai) {
+  const total = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, requests: 0 };
+  const byModel = {};
+  const byAgent = {};
+  const byDay = {};
+  const byAgentModel = {};
+
+  const add = (day, model, input, output, cacheWrite, cacheRead, cost, requests) => {
+    const m = model || 'admin-api';
+    const a = 'admin-billing';
+    if (!byModel[m]) byModel[m] = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, requests: 0 };
+    if (!byAgent[a]) byAgent[a] = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, requests: 0 };
+    if (!byDay[day]) byDay[day] = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, requests: 0 };
+    if (!byAgentModel[a]) byAgentModel[a] = {};
+    if (!byAgentModel[a][m]) byAgentModel[a][m] = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, requests: 0 };
+    [total, byModel[m], byAgent[a], byDay[day], byAgentModel[a][m]].forEach(t => {
+      t.input += input; t.output += output; t.cacheWrite += cacheWrite; t.cacheRead += cacheRead; t.cost += cost; t.requests += requests;
+    });
+  };
+
+  (anthropic?.usage?.data || []).forEach(bucket => {
+    const day = (bucket.starting_at || '').slice(0, 10) || 'unknown';
+    // Anthropic API returns model at bucket level; results don't include it per-row
+    const bucketModel = bucket.model || bucket.model_name || 'anthropic';
+    (bucket.results || []).forEach(r => {
+      const input = Number(r.uncached_input_tokens || 0);
+      const output = Number(r.output_tokens || 0);
+      const cacheRead = Number(r.cache_read_input_tokens || 0);
+      const cacheWrite = Number(r.cache_creation?.ephemeral_1h_input_tokens || 0) + Number(r.cache_creation?.ephemeral_5m_input_tokens || 0);
+      const req = 1;
+      // Try result-level model first (future API versions), fall back to bucket model
+      const model = r.model || r.model_name || bucketModel;
+      add(day, model, input, output, cacheWrite, cacheRead, 0, req);
+    });
+  });
+  (anthropic?.cost?.data || []).forEach(bucket => {
+    const day = (bucket.starting_at || '').slice(0, 10) || 'unknown';
+    let dayCost = 0;
+    (bucket.results || []).forEach(r => { dayCost += (parseFloat(r.amount || '0') / 100); });
+    if (dayCost > 0) add(day, 'anthropic-cost', 0, 0, 0, 0, dayCost, 0);
+  });
+  (openai?.usage?.data || []).forEach(bucket => {
+    const day = (bucket.start_time_iso || '').slice(0, 10) || 'unknown';
+    (bucket.results || []).forEach(r => {
+      const input = Number(r.input_tokens || 0);
+      const output = Number(r.output_tokens || 0);
+      add(day, r.model || 'openai', input, output, 0, 0, 0, Number(r.num_model_requests || 1));
+    });
+  });
+  (openai?.cost?.data || []).forEach(bucket => {
+    const day = (bucket.start_time_iso || '').slice(0, 10) || 'unknown';
+    let dayCost = 0;
+    (bucket.results || []).forEach(r => { dayCost += Number(r.amount?.value || 0); });
+    if (dayCost > 0) add(day, 'openai-cost', 0, 0, 0, 0, dayCost, 0);
+  });
+
+  return { total, byModel, byAgent, byDay, byAgentModel };
+}
+
+async function loadTokens() {
+  const period = document.getElementById('token-period').value;
+  const [modelEl, agentEl, dailyEl, amEl] = ['tok-by-model','tok-by-agent','tok-daily','tok-agent-model'].map(id => document.getElementById(id));
+  [modelEl, agentEl, dailyEl, amEl].forEach(el => { el.innerHTML = '<span class="text-slate-500 text-sm">Loading…</span>'; });
+
+  try {
+    const data = await api('/api/tokens?period=' + period);
+    const { local, anthropic, openai } = data;
+    const localEmpty = !local || !local.total || Number(local.total.requests || 0) === 0;
+    const usage = localEmpty ? summarizeBillingForUsage(anthropic, openai) : local;
+    const t = usage.total;
+
+    // Stat cards
+    document.getElementById('tok-total-cost').textContent = fmtCost(t.cost);
+    document.getElementById('tok-total-input').textContent = fmtTokens(t.input);
+    document.getElementById('tok-total-output').textContent = fmtTokens(t.output);
+    document.getElementById('tok-cache-savings').textContent = fmtTokens(t.cacheRead);
+
+    // --- By Model ---
+    const models = Object.entries(usage.byModel).sort((a,b) => b[1].cost - a[1].cost);
+    const maxCostM = models[0]?.[1]?.cost || 1;
+    modelEl.innerHTML = models.length ? models.map(([model, u]) => {
+      const pct = Math.round(u.cost / maxCostM * 100);
+      const col = modelColor(model);
+      return `<div class="mb-3">
+        <div class="flex justify-between mb-1">
+          <span class="text-xs font-mono text-slate-300">${escHtml(model)}</span>
+          <span class="text-xs font-semibold" style="color:${col}">${fmtCost(u.cost)}</span>
+        </div>
+        <div class="w-full bg-slate-900 rounded-full h-2 mb-1">
+          <div class="h-2 rounded-full" style="width:${pct}%;background:${col}"></div>
+        </div>
+        <div class="flex gap-3 text-xs text-slate-500">
+          <span>↓ ${fmtTokens(u.input)} in</span>
+          <span>↑ ${fmtTokens(u.output)} out</span>
+          <span>💾 ${fmtTokens(u.cacheRead)} cached</span>
+          <span>${u.requests} calls</span>
+        </div>
+      </div>`;
+    }).join('') : '<p class="text-slate-500 text-sm">No data.</p>';
+
+    // --- By Agent ---
+    const agents = Object.entries(usage.byAgent).sort((a,b) => b[1].cost - a[1].cost);
+    const maxCostA = agents[0]?.[1]?.cost || 1;
+    agentEl.innerHTML = agents.length ? agents.map(([label, u]) => {
+      const pct = Math.round(u.cost / maxCostA * 100);
+      const col = agentColor(label);
+      const [type, name] = label.includes(':') ? label.split(':') : ['', label];
+      return `<div class="mb-3">
+        <div class="flex justify-between mb-1">
+          <div class="flex items-center gap-1">
+            ${type === 'andy' ? '<span class="badge badge-blue text-xs">andy</span>' : '<span class="badge badge-green text-xs">claude-code</span>'}
+            <span class="text-xs text-slate-300">${escHtml(name)}</span>
+          </div>
+          <span class="text-xs font-semibold" style="color:${col}">${fmtCost(u.cost)}</span>
+        </div>
+        <div class="w-full bg-slate-900 rounded-full h-2 mb-1">
+          <div class="h-2 rounded-full" style="width:${pct}%;background:${col}"></div>
+        </div>
+        <div class="flex gap-3 text-xs text-slate-500">
+          <span>↓ ${fmtTokens(u.input + u.cacheWrite)}</span>
+          <span>↑ ${fmtTokens(u.output)}</span>
+          <span>💾 ${fmtTokens(u.cacheRead)}</span>
+          <span>${u.requests} calls</span>
+        </div>
+      </div>`;
+    }).join('') : '<p class="text-slate-500 text-sm">No data.</p>';
+
+    // --- Daily ---
+    const days = Object.entries(usage.byDay).sort((a,b) => a[0].localeCompare(b[0]));
+    if (!days.length) {
+      dailyEl.innerHTML = '<p class="text-slate-500 text-sm">No data.</p>';
+    } else {
+      const maxDayCost = Math.max(...days.map(([,u]) => u.cost)) || 1;
+      dailyEl.innerHTML = `
+        <table><thead><tr>
+          <th>Date</th><th>Input</th><th>Output</th><th>Cache Write</th><th>Cache Read</th><th>Requests</th><th>Est. Cost</th><th style="width:120px"></th>
+        </tr></thead>
+        <tbody>${days.map(([day, u]) => `
+          <tr>
+            <td class="font-mono text-xs">${day}</td>
+            <td class="text-xs">${fmtTokens(u.input)}</td>
+            <td class="text-xs">${fmtTokens(u.output)}</td>
+            <td class="text-xs text-yellow-400">${fmtTokens(u.cacheWrite)}</td>
+            <td class="text-xs text-green-400">${fmtTokens(u.cacheRead)}</td>
+            <td class="text-xs">${u.requests}</td>
+            <td class="text-xs font-semibold text-indigo-400">${fmtCost(u.cost)}</td>
+            <td>
+              <div class="bg-slate-900 rounded-full h-1.5 w-full">
+                <div class="bg-indigo-500 h-1.5 rounded-full" style="width:${Math.round(u.cost/maxDayCost*100)}%"></div>
+              </div>
+            </td>
+          </tr>`).join('')}
+        </tbody></table>`;
+    }
+
+    // --- Agent × Model detail ---
+    const agentModels = Object.entries(usage.byAgentModel).sort((a,b) => {
+      const ca = Object.values(a[1]).reduce((s,u) => s + u.cost, 0);
+      const cb = Object.values(b[1]).reduce((s,u) => s + u.cost, 0);
+      return cb - ca;
+    });
+    amEl.innerHTML = agentModels.length ? `
+      <table><thead><tr><th>Agent</th><th>Model</th><th>Input</th><th>Output</th><th>Cache Read</th><th>Calls</th><th>Cost</th></tr></thead>
+      <tbody>${agentModels.flatMap(([label, modelMap]) => {
+        const [type, name] = label.includes(':') ? label.split(':') : ['', label];
+        return Object.entries(modelMap).sort((a,b) => b[1].cost - a[1].cost).map(([model, u]) => `
+          <tr>
+            <td>
+              <div class="flex items-center gap-1">
+                ${type === 'andy' ? '<span class="badge badge-blue" style="font-size:10px">andy</span>' : '<span class="badge badge-green" style="font-size:10px">cc</span>'}
+                <span class="text-xs text-slate-300">${escHtml(name)}</span>
+              </div>
+            </td>
+            <td class="font-mono text-xs" style="color:${modelColor(model)}">${escHtml(model)}</td>
+            <td class="text-xs">${fmtTokens(u.input)}</td>
+            <td class="text-xs">${fmtTokens(u.output)}</td>
+            <td class="text-xs text-green-400">${fmtTokens(u.cacheRead)}</td>
+            <td class="text-xs">${u.requests}</td>
+            <td class="text-xs font-semibold text-indigo-400">${fmtCost(u.cost)}</td>
+          </tr>`);
+      }).join('')}
+      </tbody></table>` : '<p class="text-slate-500 text-sm">No data.</p>';
+
+    // --- Anthropic billing ---
+    renderAnthropicBilling(anthropic, data.billingCachedAt);
+    renderOpenAIBilling(openai);
+
+  } catch(e) {
+    console.error('Token load error:', e);
+    document.getElementById('tok-by-model').innerHTML = `<p class="text-red-400 text-sm">${escHtml(String(e))}</p>`;
+  }
+}
+
+let _billingCachedAt = null;
+async function invalidateBillingCache() {
+  // Force reload after a few seconds (background fetch is triggered on next /api/tokens call)
+  billingCache_forcedRefresh = true;
+  document.getElementById('tok-anthropic-status').textContent = 'refreshing…';
+  document.getElementById('tok-openai-status').textContent = 'refreshing…';
+  setTimeout(() => loadTokens(), 25000); // wait for API calls to complete
+}
+let billingCache_forcedRefresh = false;
+
+function renderAnthropicBilling(data, cachedAt) {
+  const statusEl = document.getElementById('tok-anthropic-status');
+  const el = document.getElementById('tok-anthropic');
+  if (!data) {
+    statusEl.textContent = 'fetching…';
+    statusEl.className = 'badge badge-yellow';
+    el.innerHTML = '<p class="text-slate-400 text-sm">⏳ Fetching from Anthropic API in background… refresh in ~20s</p>';
+    setTimeout(() => loadTokens(), 20000);
+    return;
+  }
+  statusEl.textContent = 'connected';
+  statusEl.className = 'badge badge-green';
+
+  try {
+    // Cost: amount is a string in cents e.g. "317.21" = $3.17
+    const costBuckets = data.cost?.data || [];
+    let totalCost = 0;
+    for (const bucket of costBuckets) {
+      for (const r of (bucket.results || [])) {
+        totalCost += parseFloat(r.amount || '0') / 100;
+      }
+    }
+
+    // Usage: fields are uncached_input_tokens, output_tokens, cache_creation, cache_read_input_tokens
+    const usageBuckets = data.usage?.data || [];
+    let totalIn = 0, totalOut = 0, totalCw = 0, totalCr = 0;
+    for (const bucket of usageBuckets) {
+      for (const r of (bucket.results || [])) {
+        totalIn += r.uncached_input_tokens || r.input_tokens || 0;
+        totalOut += r.output_tokens || 0;
+        const cc = r.cache_creation || {};
+        totalCw += (cc.ephemeral_1h_input_tokens || 0) + (cc.ephemeral_5m_input_tokens || 0);
+        totalCr += r.cache_read_input_tokens || 0;
+      }
+    }
+
+    el.innerHTML = `
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-indigo-400">${fmtCost(totalCost)}</div><div class="text-xs text-slate-500">Total cost</div></div>
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-blue-400">${fmtTokens(totalIn)}</div><div class="text-xs text-slate-500">Input tokens</div></div>
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-purple-400">${fmtTokens(totalOut)}</div><div class="text-xs text-slate-500">Output tokens</div></div>
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-green-400">${fmtTokens(totalCr)}</div><div class="text-xs text-slate-500">Cache read</div></div>
+      </div>
+      <div class="text-xs text-slate-500">Source: Anthropic Admin API · Cached 5 min · <span class="text-indigo-400 cursor-pointer" onclick="invalidateBillingCache()">Refresh</span></div>`;
+  } catch(e) {
+    el.innerHTML = `<p class="text-red-400 text-sm">Parse error: ${escHtml(String(e))}</p><pre class="text-xs text-slate-500 mt-2">${escHtml(JSON.stringify(data).slice(0,300))}</pre>`;
+  }
+}
+
+function renderOpenAIBilling(data) {
+  const statusEl = document.getElementById('tok-openai-status');
+  const el = document.getElementById('tok-openai');
+  if (!data) {
+    statusEl.textContent = 'fetching…';
+    statusEl.className = 'badge badge-yellow';
+    el.innerHTML = '<p class="text-slate-400 text-sm">⏳ Fetching from OpenAI API in background… refresh in ~25s</p>';
+    return;
+  }
+  if (data._error) {
+    statusEl.textContent = 'error';
+    statusEl.className = 'badge badge-red';
+    el.innerHTML = `<p class="text-red-400 text-sm">API error: ${escHtml(data._error)}</p>`;
+    return;
+  }
+  statusEl.textContent = 'connected';
+  statusEl.className = 'badge badge-green';
+
+  try {
+    const costBuckets = data.cost?.data || [];
+    let totalCost = 0;
+    for (const bucket of costBuckets) {
+      totalCost += (bucket.results || []).reduce((s, r) => s + (r.amount?.value ?? 0), 0);
+    }
+
+    const usageBuckets = data.usage?.data || [];
+    let totalIn = 0, totalOut = 0;
+    for (const bucket of usageBuckets) {
+      for (const r of (bucket.results || [])) {
+        totalIn += r.input_tokens || 0;
+        totalOut += r.output_tokens || 0;
+      }
+    }
+
+    el.innerHTML = `
+      <div class="grid grid-cols-3 gap-3 mb-4">
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-orange-400">${fmtCost(totalCost)}</div><div class="text-xs text-slate-500">Total cost</div></div>
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-yellow-400">${fmtTokens(totalIn)}</div><div class="text-xs text-slate-500">Input tokens</div></div>
+        <div class="bg-slate-900 rounded p-3 text-center"><div class="text-lg font-bold text-amber-400">${fmtTokens(totalOut)}</div><div class="text-xs text-slate-500">Output tokens</div></div>
+      </div>
+      <div class="text-xs text-slate-500">Source: OpenAI Admin API · Cached for 5 min</div>`;
+  } catch(e) {
+    el.innerHTML = `<p class="text-red-400 text-sm">Parse error: ${escHtml(String(e))}</p>`;
+  }
+}
+
+// ============================================================
+// AI Provider Quotas
+// ============================================================
+const PROVIDER_LABELS = {
+  claude: 'Claude',
+  codex: 'Codex / ChatGPT',
+  gemini: 'Gemini',
+  cerebras: 'Cerebras',
+  kimi: 'Kimi',
+  minimax: 'Minimax',
+  zai: 'Z.AI',
+};
+
+const PROVIDER_NOTES = {};
+
+function quotaColor(pct) {
+  if (pct === null || pct === undefined) return 'bg-slate-700';
+  if (pct >= 90) return 'bg-red-500';
+  if (pct >= 70) return 'bg-yellow-500';
+  return 'bg-indigo-500';
+}
+
+function quotaBadgeClass(pct) {
+  if (pct === null || pct === undefined) return 'badge-gray';
+  if (pct >= 90) return 'badge-red';
+  if (pct >= 70) return 'badge-yellow';
+  return 'badge-green';
+}
+
+function renderQuotaCard(provider, data) {
+  const name = PROVIDER_LABELS[provider] || provider;
+  if (!data) {
+    return `<div class="card opacity-40 p-3">
+      <div class="text-xs font-semibold text-slate-500 mb-1">${escHtml(name)}</div>
+      <div class="text-xs text-slate-600">no key</div>
+    </div>`;
+  }
+  if (data.info) {
+    return `<div class="card p-3 border border-slate-600/90">
+      <div class="text-xs font-semibold text-slate-300 mb-1.5">${escHtml(name)}</div>
+      <p class="text-xs text-slate-500 leading-relaxed m-0">${escHtml(data.message || '')}</p>
+    </div>`;
+  }
+  if (data.error && !data.primary) {
+    return `<div class="card p-3" style="border-color:#450a0a">
+      <div class="text-xs font-semibold text-slate-400 mb-1">${escHtml(name)}</div>
+      <div class="text-xs text-red-400 truncate" title="${escHtml(data.error)}">${escHtml(data.error.slice(0, 60))}</div>
+    </div>`;
+  }
+
+  const windows = [data.primary, data.secondary].filter(Boolean);
+  const windowsHtml = windows.map(w => {
+    const pct = w.usedPercent ?? 0;
+    const remaining = 100 - pct;
+    const resetStr = w.resetsAt ? new Date(w.resetsAt).toLocaleTimeString() : null;
+    return `<div class="mb-2">
+        <div class="flex justify-between mb-0.5">
+          <span class="text-xs text-slate-500 truncate max-w-28" title="${escHtml(w.windowLabel)}">${escHtml(w.windowLabel)}</span>
+          <span class="text-xs font-semibold ${pct>=90?'text-red-400':pct>=70?'text-yellow-400':'text-emerald-400'}">${remaining}%</span>
+        </div>
+        <div class="w-full bg-slate-700 rounded-full h-1.5">
+          <div class="${quotaColor(pct)} h-1.5 rounded-full" style="width:${Math.min(pct,100)}%"></div>
+        </div>
+        ${resetStr ? `<div class="text-xs text-slate-600 mt-0.5">↺ ${resetStr}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  const perModelHtml = data.perModel?.length > 1 ? `
+    <details class="mt-1">
+      <summary class="text-xs text-slate-600 cursor-pointer">+${data.perModel.length} models</summary>
+      <div class="mt-1 space-y-1">
+        ${data.perModel.map(m => `<div class="flex items-center gap-1.5">
+            <div class="flex-1 bg-slate-700 rounded-full h-1">
+              <div class="${quotaColor(m.usedPercent)} h-1 rounded-full" style="width:${Math.min(m.usedPercent,100)}%"></div>
+            </div>
+            <span class="text-xs text-slate-500 w-7 text-right">${100-m.usedPercent}%</span>
+          </div>`).join('')}
+      </div>
+    </details>` : '';
+
+  const labelHtml = data.label ? `<div class="text-xs text-slate-600 mb-1.5">${escHtml(data.label)}</div>` : '';
+
+  return `<div class="card p-3">
+    <div class="text-xs font-semibold text-slate-300 mb-2">${escHtml(name)}</div>
+    ${labelHtml}${windowsHtml}${perModelHtml}
+  </div>`;
+}
+
+async function loadQuota() {
+  const grid = document.getElementById('quota-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div class="card text-slate-500 text-xs col-span-full p-3">Loading…</div>';
+  try {
+    const res = await fetch('/api/quota', { credentials: 'same-origin' });
+    const data = await res.json();
+    const { providers, cachedAt } = data;
+    document.getElementById('quota-cached-at').textContent =
+      cachedAt ? `last fetched ${new Date(cachedAt).toLocaleTimeString()}` : '';
+    const cards = Object.entries(providers)
+      .map(([key, val]) => renderQuotaCard(key, val))
+      .join('');
+    grid.innerHTML = cards || '<p class="text-slate-500 text-sm">No provider data available.</p>';
+  } catch(e) {
+    grid.innerHTML = `<div class="card text-red-400 text-sm col-span-full">${escHtml(String(e))}</div>`;
+  }
+}
+
+// ============================================================
+// SSE — Real-time updates
+// ============================================================
+function connectSSE() {
+  if (sseSource) sseSource.close();
+  sseSource = new EventSource('/events');
+
+  sseSource.addEventListener('connected', () => {
+    sseConnected = true;
+    document.getElementById('conn-dot').className = 'dot dot-green';
+    document.getElementById('conn-status').textContent = 'live';
+  });
+
+  sseSource.addEventListener('new_message', () => {
+    if (currentSection === 'overview') loadOverview();
+    else if (currentSection === 'messages') loadMessages();
+  });
+
+  sseSource.addEventListener('task_update', () => {
+    if (currentSection === 'overview') loadOverview();
+    else if (currentSection === 'tasks') loadTasks();
+  });
+
+  sseSource.addEventListener('agents', (e) => {
+    const data = JSON.parse(e.data);
+    const stats = data?.stats || {};
+    const containers = Array.isArray(data?.containers) ? data.containers : [];
+    const activeCount = Number(stats.activeCount ?? containers.length ?? 0);
+    const maxConcurrent = Number(stats.maxConcurrent ?? 0);
+    const waitingCount = Number(stats.waitingCount ?? 0);
+    // Update overview stats if visible
+    if (currentSection === 'overview') {
+      document.getElementById('stat-agents').textContent =
+        activeCount + '/' + maxConcurrent;
+    }
+    if (currentSection === 'agents') {
+      document.getElementById('agent-active-count').textContent = activeCount;
+      document.getElementById('agent-waiting-count').textContent = waitingCount;
+      // Refresh full agent view every 10s only to avoid thrashing
+    }
+  });
+
+  sseSource.addEventListener('graph_rebuilt', () => {
+    const badge = document.getElementById('graph-updated-badge');
+    if (badge) {
+      badge.style.display = 'inline';
+      setTimeout(() => { badge.style.display = 'none'; }, 30000);
+    }
+  });
+
+  sseSource.onerror = () => {
+    sseConnected = false;
+    document.getElementById('conn-dot').className = 'dot dot-red';
+    document.getElementById('conn-status').textContent = 'reconnecting…';
+    // EventSource auto-reconnects
+  };
+}
+
+// ============================================================
+// Init
+// ============================================================
+window.addEventListener('DOMContentLoaded', async () => {
+  connectSSE();
+  loadOverview();
+
+  // Populate group dropdown for log section with group folders
+  try {
+    const data = await api('/api/groups');
+    const logGroup = document.getElementById('log-group');
+    logGroup.innerHTML = data.folders.map(f =>
+      `<option value="${escHtml(f)}">${escHtml(f)}</option>`
+    ).join('');
+  } catch(e) {}
+
+  // Auto-refresh active section every 30s
+  setInterval(() => {
+    if (currentSection === 'overview') loadOverview();
+    else if (currentSection === 'agents') loadAgents();
+    else if (currentSection === 'tasks') loadTasks();
+  }, 30000);
+});
+</script>
+</body>
+</html>
