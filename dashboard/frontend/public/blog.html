@@ -607,6 +607,14 @@
         <select id="lg-category" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
           <option value="">All Categories</option>
         </select>
+        <label class="text-xs text-slate-500 flex items-center gap-2">WP type
+          <select id="lg-wp-type" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" style="min-width:9rem">
+            <option value="all">All types</option>
+            <option value="post">Posts only</option>
+            <option value="page">Pages only</option>
+          </select>
+        </label>
+        <span id="lg-type-counts" class="text-xs text-slate-500 whitespace-nowrap">—</span>
         <div class="flex gap-1">
           <button onclick="lgHighlight('all')" class="lg-btn badge badge-blue" data-mode="all">All</button>
           <button onclick="lgHighlight('categories')" class="lg-btn badge" style="background:#1e1b4b;color:#a5b4fc;cursor:pointer">◆ Categories</button>
@@ -638,24 +646,38 @@
       </div>
     </div>
 
-    <!-- Legend -->
+    <!-- Legend: structure uses fixed semantic colors; category row is fill-only (no overlap) -->
     <div class="card mt-4">
-      <div class="flex flex-wrap items-center gap-4">
-        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Legend</div>
-        <div class="flex items-center gap-1.5 text-xs text-slate-400">
-          <svg width="14" height="14" viewBox="0 0 14 14"><polygon points="7,1 13,13 1,13" fill="#6366f1"/></svg>
-          Category page
+      <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Legend</div>
+      <div class="space-y-3">
+        <div>
+          <p class="text-[11px] text-slate-500 mb-2">Structure <span class="text-slate-600 font-normal normal-case">— these marks are the same no matter which category color fills the node. Bubble size = link count.</span></p>
+          <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <div class="flex items-center gap-2 text-xs text-slate-300">
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,2 18,18 2,18" fill="#475569" stroke="#e2e8f0" stroke-width="1"/></svg>
+              <span>Category hub <span class="text-slate-500">(◆ diamond, Hugo taxonomy)</span></span>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-slate-300">
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="#64748b" stroke="#94a3b8" stroke-width="1"/></svg>
+              <span>Post <span class="text-slate-500">(circle; fill = category)</span></span>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-slate-300">
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+                <circle cx="10" cy="10" r="6" fill="#64748b"/>
+                <rect x="3" y="3" width="14" height="14" rx="2" fill="none" stroke="#f59e0b" stroke-width="2"/>
+              </svg>
+              <span>Page <span class="text-slate-500">(amber square outline; fill = category)</span></span>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-slate-300">
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="#334155" stroke="#ef4444" stroke-width="2"/></svg>
+              <span>Orphan <span class="text-slate-500">(red ring, no links)</span></span>
+            </div>
+          </div>
         </div>
-        <div class="flex items-center gap-1.5 text-xs text-slate-400">
-          <svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="#4ade80" opacity="0.8"/></svg>
-          Article page
+        <div>
+          <p class="text-[11px] text-slate-500 mb-2">Category colors <span class="text-slate-600 font-normal normal-case">— fill only. Filter by category and WP type in the bar above.</span></p>
+          <div id="lg-cat-legend" class="flex flex-wrap gap-2"></div>
         </div>
-        <div class="flex items-center gap-1.5 text-xs text-slate-400">
-          <svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="#1e293b" stroke="#ef4444" stroke-width="2"/></svg>
-          Orphan (no links at all)
-        </div>
-        <div class="text-xs text-slate-600">· Bubble size = total links · Color = category · Edges from ◆ = Hugo auto-links to articles · Edges to ◆ = explicit article→category links</div>
-        <div id="lg-cat-legend" class="flex flex-wrap gap-2 ml-2"></div>
       </div>
     </div>
 
@@ -702,9 +724,9 @@
       <h1 class="text-xl font-bold text-slate-100">WordPress Sync</h1>
       <button class="btn btn-sm btn-primary" onclick="runWpSync()">Run Sync</button>
       <button class="btn btn-sm" style="background:#334155;color:#94a3b8;" onclick="loadWpSync()">Refresh</button>
-      <a class="btn btn-sm" style="background:#1e293b;color:#cbd5e1;" href="/api/blog/wp-sync/csv" target="_blank" rel="noopener">Download CSV</a>
+      <button class="btn btn-sm" style="background:#334155;color:#cbd5e1;" onclick="rebuildWpGraphFromSyncPage()">Rebuild graph HTML</button>
     </div>
-    <p class="text-sm text-slate-500 mb-4">Syncs WordPress posts/pages via REST API, classifies by taxonomy, and builds internal backlink graph data for the dashboard.</p>
+    <p class="text-sm text-slate-500 mb-4">Syncs WordPress posts/pages via REST API, classifies by taxonomy, and stores articles in the dashboard database (with optional HTML snapshots on disk). Delete removes a row from this database only; use Rebuild graph HTML to refresh the saved link graph file. Full link stats are rebuilt on the next sync.</p>
 
     <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
       <div class="card"><div class="stat-value" id="wps-count">-</div><div class="stat-label">Articles Synced</div></div>
@@ -752,11 +774,12 @@
             <th class="pb-2 pr-3">Title (Link)</th>
             <th class="pb-2 pr-3 text-right">In</th>
             <th class="pb-2 pr-3 text-right">Out</th>
-            <th class="pb-2">Categories</th>
+            <th class="pb-2 pr-3">Categories</th>
+            <th class="pb-2 text-right">Actions</th>
           </tr>
         </thead>
         <tbody id="wps-table-body">
-          <tr><td colspan="7" class="py-4 text-slate-500"><span class="loading-spinner"></span>Loading WordPress records…</td></tr>
+          <tr><td colspan="8" class="py-4 text-slate-500"><span class="loading-spinner"></span>Loading WordPress records…</td></tr>
         </tbody>
       </table>
       <div class="flex items-center justify-between mt-3 text-xs text-slate-400">
@@ -841,20 +864,76 @@
 
   <!-- Interlinking Section -->
   <div id="section-blog-interlinking" class="section p-6">
-    <div class="flex flex-wrap items-center gap-3 mb-1">
+    <div class="flex flex-wrap items-center gap-3 mb-2">
       <h1 class="text-xl font-bold text-slate-100">Interlinking Opportunities</h1>
       <button class="btn btn-sm btn-primary" onclick="loadInterlinking()">Refresh</button>
     </div>
-    <p class="text-sm text-slate-500 mb-1">Orphan &amp; weakly-linked pages. Run <code class="text-indigo-400">python3 blog_automation/interlinking_agent.py --limit 20</code> to generate Claude suggestions.</p>
+    <p class="text-sm text-slate-500 mb-1 max-w-4xl">Orphan &amp; weakly-linked pages. Run <code class="text-indigo-400 bg-slate-900/80 px-1 rounded">python3 blog_automation/interlinking_agent.py --limit 20</code> to generate Claude suggestions, or use the dashboard API after <strong class="text-slate-400">Refresh</strong>.</p>
+    <div class="flex flex-wrap items-center gap-3 mb-1 mt-3 pt-3 border-t border-slate-800">
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Dashboard</span>
+      <p class="text-[11px] text-slate-600 w-full -mt-1 mb-0">Choose which problem bucket and whether to include only <strong class="text-slate-500">posts</strong>, only <strong class="text-slate-500">pages</strong>, or all URLs. The list below uses the same filters.</p>
+      <label class="text-xs text-slate-500 flex items-center gap-2">Problem
+        <select id="il-filter" onchange="ilApplyFilter()" style="width:200px" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-slate-200">
+          <option value="orphans">Full Orphans</option>
+          <option value="no-inbound">No Inbound</option>
+          <option value="weak">Weak Inbound</option>
+          <option value="all">All Problem Pages</option>
+        </select>
+      </label>
+      <label class="text-xs text-slate-500 flex items-center gap-2">WP type
+        <select id="il-wp-type-filter" onchange="ilApplyFilter()" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-slate-200" style="width:130px">
+          <option value="all">All types</option>
+          <option value="post">Posts only</option>
+          <option value="page">Pages only</option>
+        </select>
+      </label>
+      <label class="text-xs text-slate-500 flex items-center gap-1">Limit <input id="il-limit" type="number" min="1" max="50" value="10" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 w-16 text-slate-200 text-sm"></label>
+      <label class="text-xs text-slate-400 flex items-center gap-1 cursor-pointer select-none"><input type="checkbox" id="il-resume" checked class="rounded border-slate-600"> Resume <span class="text-slate-600">(skip done)</span></label>
+      <label class="text-xs text-slate-400 flex items-center gap-1 cursor-pointer select-none"><input type="checkbox" id="il-redo" class="rounded border-slate-600"> Redo first N</label>
+      <button class="btn btn-sm" style="background:#4f46e5;color:#e0e7ff;" onclick="runInterlinkingSuggestions()">Generate suggestions (Claude)</button>
+      <span id="il-run-status" class="text-xs text-slate-500"></span>
+    </div>
+    <div id="il-run-progress-wrap" class="hidden mb-3 max-w-xl">
+      <div class="flex justify-between text-[11px] text-slate-500 mb-1">
+        <span id="il-run-progress-label">Generating…</span>
+        <span id="il-run-progress-pct">0%</span>
+      </div>
+      <div class="h-2 rounded-full bg-slate-800 overflow-hidden border border-slate-700/80">
+        <div id="il-run-progress-bar" class="h-full bg-indigo-500 rounded-full transition-[width] duration-300 ease-out" style="width:0%"></div>
+      </div>
+    </div>
     <p class="text-xs text-slate-600 mb-1" id="il-last-run"></p>
     <p class="text-xs text-slate-600 mb-4" id="il-graph-updated"></p>
 
-    <!-- Stats -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      <div class="card"><div class="stat-value text-red-400" id="il-orphans">-</div><div class="stat-label">Full Orphans</div></div>
-      <div class="card"><div class="stat-value text-amber-400" id="il-no-inbound">-</div><div class="stat-label">No Inbound</div></div>
-      <div class="card"><div class="stat-value text-yellow-400" id="il-weak">-</div><div class="stat-label">Weak (1 link)</div></div>
-      <div class="card"><div class="stat-value text-indigo-400" id="il-suggestions">-</div><div class="stat-label">With Suggestions</div></div>
+    <!-- Stats (three cards — site-wide totals from the link graph) -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2">
+      <div class="card"><div class="stat-value text-red-400" id="il-orphans">—</div><div class="stat-label">Full Orphans</div></div>
+      <div class="card"><div class="stat-value text-amber-400" id="il-no-inbound">—</div><div class="stat-label">No Inbound</div></div>
+      <div class="card"><div class="stat-value text-yellow-400" id="il-weak">—</div><div class="stat-label">Weak (1 link)</div></div>
+    </div>
+    <p class="text-xs text-slate-600 mb-4 max-w-3xl">Numbers above count <strong class="text-slate-400">every</strong> matching page in the graph. The list below shows only pages that already have <strong class="text-slate-400">saved</strong> Claude suggestions (processed).</p>
+
+    <div id="il-progress-summary" class="card mb-6 p-4 border-slate-800">
+      <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Processed vs addressed</div>
+      <div class="flex flex-wrap gap-x-10 gap-y-2 text-sm items-baseline">
+        <div>
+          <span class="text-slate-500">Processed</span>
+          <span id="il-count-processed" class="text-indigo-400 font-bold text-xl mx-1">—</span>
+          <span class="text-slate-600 text-xs">pages with saved suggestions</span>
+        </div>
+        <div>
+          <span class="text-slate-500">Links applied</span>
+          <span id="il-count-links" class="text-indigo-400 font-bold text-xl mx-1">—</span>
+          <span class="text-slate-600 text-xs">(cron)</span>
+        </div>
+        <div>
+          <span class="text-slate-500">Slugs in change log</span>
+          <span id="il-count-orphans-fixed" class="text-emerald-400 font-bold text-xl mx-1">—</span>
+          <span class="text-slate-600 text-xs">(cron · distinct orphan_slug)</span>
+        </div>
+      </div>
+      <p id="il-cron-hint" class="text-xs text-slate-500 mt-3 hidden"></p>
+      <p id="il-site-url-hint" class="text-xs text-amber-500/90 mt-3 hidden">Set <code class="text-amber-400">WP_SITE_URL</code> in the dashboard environment so slugs open on your live site.</p>
     </div>
 
     <!-- Change Log -->
@@ -864,23 +943,19 @@
           <span class="text-sm font-semibold text-slate-200">Cron Change Log</span>
           <span class="text-xs text-slate-500 ml-2">Links applied every 6 hours — track GSC impact after each change</span>
         </div>
-        <button class="btn btn-sm" onclick="loadInterlinkingChanges()" style="font-size:11px">Refresh</button>
+        <button class="btn btn-sm" onclick="ilRefreshChangesOnly()" style="font-size:11px">Refresh</button>
       </div>
-      <div id="il-changes-list"><p class="text-xs text-slate-600">Loading change log…</p></div>
+      <div id="il-changes-list"><p class="text-xs text-slate-600">Click <strong class="text-slate-400">Refresh</strong> above to load the change log.</p></div>
     </div>
 
-    <!-- Filters -->
-    <div class="flex gap-3 mb-4 flex-wrap">
-      <select id="il-filter" onchange="ilApplyFilter()" style="width:180px">
-        <option value="orphans">Full Orphans</option>
-        <option value="no-inbound">No Inbound</option>
-        <option value="weak">Weak Inbound</option>
-        <option value="all">All Problem Pages</option>
-      </select>
-      <input id="il-search" placeholder="Filter by slug…" oninput="ilApplyFilter()" style="width:200px">
+    <!-- List filter (scope = Problem + WP type above) -->
+    <div class="flex gap-3 mb-4 flex-wrap items-center">
+      <span class="text-xs text-slate-500 uppercase tracking-wider">Search list</span>
+      <input id="il-search" placeholder="Filter by slug or title…" oninput="ilApplyFilter()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200" style="width:240px">
+      <span class="text-xs text-slate-600">Problem and WP type for this list are set in <strong class="text-slate-500">Dashboard</strong> above.</span>
     </div>
 
-    <div id="il-list">Loading…</div>
+    <div id="il-list"><p class="text-sm text-slate-500">Click <strong class="text-slate-400">Refresh</strong> at the top to load problem pages and suggestions from the API.</p></div>
   </div>
 
   <!-- Cannibalism Section -->
@@ -2459,6 +2534,23 @@ function lgCatColor(cat) {
   return lgCatColors[cat];
 }
 
+/** WordPress content type: post, page, attachment, … */
+function lgNormalizeWpType(n) {
+  return String((n && n.type) || 'post').toLowerCase();
+}
+
+function lgWpTypeLabel(n) {
+  const t = lgNormalizeWpType(n);
+  if (t === 'post') return 'Post';
+  if (t === 'page') return 'Page';
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Post';
+}
+
+/** Node fill is always the category swatch — post vs page is shown with shape (amber frame), not a second hue. */
+function lgContentFill(n) {
+  return lgCatColor(n.category);
+}
+
 async function loadLinkGraph() {
   try {
     const [wpGraph, wpSyncState] = await Promise.all([
@@ -2482,6 +2574,17 @@ async function loadLinkGraph() {
     document.getElementById('lg-orphans').textContent = data.stats.orphanNodes;
     document.getElementById('lg-avg').textContent = data.stats.avgLinksPerNode;
 
+    const postN = data.nodes.filter((n) => lgNormalizeWpType(n) === 'post').length;
+    const pageN = data.nodes.filter((n) => lgNormalizeWpType(n) === 'page').length;
+    const otherN = data.nodes.length - postN - pageN;
+    const tc = document.getElementById('lg-type-counts');
+    if (tc) {
+      tc.textContent =
+        otherN > 0
+          ? `${postN} posts · ${pageN} pages · ${otherN} other`
+          : `${postN} posts · ${pageN} pages`;
+    }
+
     // Category dropdown — only from article nodes (category nodes have id === category)
     const cats = [...new Set(data.nodes.filter(n => !n.isCategory).map(n => n.category))].sort();
     const sel = document.getElementById('lg-category');
@@ -2489,6 +2592,9 @@ async function loadLinkGraph() {
       `<option value="${escHtml(c)}">${escHtml(c.replace(/-/g, ' '))}</option>`
     ).join('');
     sel.onchange = () => lgApplyFilters();
+
+    const wpSel = document.getElementById('lg-wp-type');
+    if (wpSel) wpSel.onchange = () => lgApplyFilters();
 
     // Search
     document.getElementById('lg-search').oninput = debounce(() => lgApplyFilters(), 200);
@@ -2523,6 +2629,7 @@ async function loadLinkGraph() {
 
     // Render graph
     lgRenderGraph();
+    lgApplyFilters();
   } catch(e) {
     console.error('Link graph error:', e);
     document.getElementById('lg-graph').innerHTML = `<p class="text-red-400 p-4">${escHtml(String(e))}</p>`;
@@ -2549,7 +2656,7 @@ function lgNormalizeWpGraph(raw, syncState) {
           : ''),
     ),
     category: String(n.category || 'uncategorized'),
-    type: String(n.type || 'post'),
+    type: String(n.type || 'post').toLowerCase(),
     status: String(n.status || 'unknown'),
     isCategory: false,
     inbound: 0,
@@ -2632,11 +2739,12 @@ function lgRenderGraph() {
       if (lgHighlightMode === 'orphans' && n.inbound === 0 && n.outbound === 0) return '#ef4444';
       if (lgHighlightMode === 'no-inbound' && n.inbound === 0) return '#f59e0b';
       if (lgHighlightMode === 'no-outbound' && n.outbound === 0) return '#f97316';
-      return lgCatColor(n.category);
+      return lgContentFill(n);
     })
     .nodeCanvasObjectMode(n => {
       if (n.isCategory) return 'replace';   // replace circle entirely with diamond
-      if (n.inbound === 0 && n.outbound === 0) return 'after'; // red ring overlay on orphan circles
+      if (n.inbound === 0 && n.outbound === 0) return 'after'; // orphan: custom fill + red ring
+      if (lgNormalizeWpType(n) === 'page') return 'after';       // page: amber square frame on top of default circle
       return undefined;
     })
     .nodeCanvasObject((n, ctx, globalScale) => {
@@ -2672,19 +2780,35 @@ function lgRenderGraph() {
         const r = Math.sqrt(Math.max(1, (n.inbound + n.outbound) * 0.5)) * 4;
         ctx.beginPath();
         ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
-        ctx.fillStyle = lgCatColor(n.category);
+        ctx.fillStyle = lgContentFill(n);
         ctx.fill();
         ctx.beginPath();
         ctx.arc(n.x, n.y, r + 2, 0, 2 * Math.PI);
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 1.5 / globalScale;
         ctx.stroke();
+      } else if (lgNormalizeWpType(n) === 'page') {
+        const r = Math.sqrt(Math.max(1, (n.inbound + n.outbound) * 0.5)) * 4;
+        const pad = 2.5 / globalScale;
+        const side = 2 * (r + pad);
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2.25 / globalScale;
+        const x0 = n.x - r - pad;
+        const y0 = n.y - r - pad;
+        const rr = 3 / globalScale;
+        if (typeof ctx.roundRect === 'function') {
+          ctx.beginPath();
+          ctx.roundRect(x0, y0, side, side, rr);
+          ctx.stroke();
+        } else {
+          ctx.strokeRect(x0, y0, side, side);
+        }
       }
     })
     .linkColor(() => 'rgba(100,116,139,0.3)')
     .linkDirectionalArrowLength(3)
     .linkDirectionalArrowRelPos(1)
-    .nodeLabel(n => `${n.isCategory ? '◆ CATEGORY PAGE\n' : ''}${n.title}\n${n.category.replace(/-/g, ' ')}\n${n.url || '(no url)'}\nIn: ${n.inbound} | Out: ${n.outbound}`)
+    .nodeLabel(n => `${n.isCategory ? '◆ CATEGORY PAGE\n' : ''}${n.title}\n${lgWpTypeLabel(n)} · ${n.category.replace(/-/g, ' ')}\n${n.url || '(no url)'}\nIn: ${n.inbound} | Out: ${n.outbound}`)
     .onNodeClick(n => lgSelectNode(n))
     .onBackgroundClick(() => lgDeselectNode())
     .onNodeHover(n => {
@@ -2703,8 +2827,11 @@ function lgSelectNode(n) {
   const detail = document.getElementById('lg-detail');
   detail.classList.remove('hidden');
   document.getElementById('lg-detail-title').textContent = n.title;
+  const typeBadge = n.isCategory
+    ? ''
+    : `<span class="badge mr-1" style="font-size:10px;background:#334155;color:#e2e8f0">${escHtml(lgWpTypeLabel(n))}</span>`;
   document.getElementById('lg-detail-category').innerHTML =
-    `${n.isCategory ? '<span class="badge badge-blue mr-1" style="font-size:10px">◆ Category Page</span>' : ''}${escHtml(n.category.replace(/-/g, ' '))}`;
+    `${n.isCategory ? '<span class="badge badge-blue mr-1" style="font-size:10px">◆ Category Page</span>' : typeBadge}${escHtml(n.category.replace(/-/g, ' '))}`;
   const detailUrlEl = document.getElementById('lg-detail-url');
   if (n.url) {
     detailUrlEl.innerHTML = `<a href="${escHtml(n.url)}" target="_blank" rel="noopener" class="text-indigo-300 hover:text-indigo-200 underline">${escHtml(n.url)}</a>`;
@@ -2728,7 +2855,7 @@ function lgSelectNode(n) {
   // Highlight connected nodes in graph
   const connected = new Set([n.id, ...outLinks, ...inLinks]);
   lgGraph
-    .nodeColor(node => connected.has(node.id) ? (node.id === n.id ? '#f1f5f9' : lgCatColor(node.category)) : 'rgba(51,65,85,0.3)')
+    .nodeColor(node => connected.has(node.id) ? (node.id === n.id ? '#f1f5f9' : lgContentFill(node)) : 'rgba(51,65,85,0.3)')
     .linkColor(link => {
       const s = typeof link.source === 'object' ? link.source.id : link.source;
       const t = typeof link.target === 'object' ? link.target.id : link.target;
@@ -2767,11 +2894,11 @@ function lgApplyHighlight() {
   if (!lgGraph) return;
   lgGraph
     .nodeColor(n => {
-      if (lgHighlightMode === 'categories') return lgCatColor(n.category);
+      if (lgHighlightMode === 'categories') return lgContentFill(n);
       if (lgHighlightMode === 'orphans') return (n.inbound === 0 && n.outbound === 0) ? '#ef4444' : 'rgba(51,65,85,0.3)';
       if (lgHighlightMode === 'no-inbound') return n.inbound === 0 ? '#f59e0b' : 'rgba(51,65,85,0.3)';
       if (lgHighlightMode === 'no-outbound') return n.outbound === 0 ? '#f97316' : 'rgba(51,65,85,0.3)';
-      return lgCatColor(n.category);
+      return lgContentFill(n);
     })
     .linkColor(() => lgHighlightMode === 'all' ? 'rgba(100,116,139,0.3)' : 'rgba(100,116,139,0.08)');
 }
@@ -2780,12 +2907,15 @@ function lgApplyFilters() {
   if (!lgData || !lgGraph) return;
   const search = document.getElementById('lg-search').value.toLowerCase();
   const cat = document.getElementById('lg-category').value;
+  const wpF = document.getElementById('lg-wp-type') && document.getElementById('lg-wp-type').value;
 
   const visibleIds = new Set();
   lgData.nodes.forEach(n => {
     const matchSearch = !search || n.id.includes(search) || n.title.toLowerCase().includes(search);
     const matchCat = !cat || n.category === cat;
-    if (matchSearch && matchCat) visibleIds.add(n.id);
+    const wt = lgNormalizeWpType(n);
+    const matchWp = !wpF || wpF === 'all' || wt === wpF;
+    if (matchSearch && matchCat && matchWp) visibleIds.add(n.id);
   });
 
   const filteredNodes = lgData.nodes.filter(n => visibleIds.has(n.id));
@@ -2803,8 +2933,11 @@ function lgResetView() {
   document.querySelector('.lg-btn[data-mode="all"]')?.classList.add('active');
   document.getElementById('lg-search').value = '';
   document.getElementById('lg-category').value = '';
+  const wpR = document.getElementById('lg-wp-type');
+  if (wpR) wpR.value = 'all';
   document.getElementById('lg-detail').classList.add('hidden');
   lgRenderGraph();
+  lgApplyFilters();
 }
 
 function lgBuildCoveragepanel(coverage) {
@@ -2979,32 +3112,200 @@ function lgBuildOpportunities() {
 // Interlinking Page
 // ============================================================
 let ilData = null;
+let ilPollTimer = null;
+
+function ilSetCronHint(hint) {
+  const el = document.getElementById('il-cron-hint');
+  if (!el) return;
+  if (hint) {
+    el.textContent = hint;
+    el.classList.remove('hidden');
+  } else {
+    el.textContent = '';
+    el.classList.add('hidden');
+  }
+}
+
+function ilHideRunProgress() {
+  const wrap = document.getElementById('il-run-progress-wrap');
+  const bar = document.getElementById('il-run-progress-bar');
+  if (wrap) wrap.classList.add('hidden');
+  if (bar) bar.style.width = '0%';
+  const pctEl = document.getElementById('il-run-progress-pct');
+  const label = document.getElementById('il-run-progress-label');
+  if (pctEl) pctEl.textContent = '0%';
+  if (label) label.textContent = '';
+}
+
+/** @param {{ running: boolean, processed: number, total: number, lastMessage?: string | null }} s */
+function ilUpdateRunProgressFromState(s) {
+  const wrap = document.getElementById('il-run-progress-wrap');
+  const bar = document.getElementById('il-run-progress-bar');
+  const pctEl = document.getElementById('il-run-progress-pct');
+  const label = document.getElementById('il-run-progress-label');
+  if (!wrap || !bar || !pctEl || !label) return;
+  const total = typeof s.total === 'number' && s.total > 0 ? s.total : 0;
+  const done = typeof s.processed === 'number' && s.processed >= 0 ? s.processed : 0;
+  if (!s.running && total === 0) {
+    ilHideRunProgress();
+    return;
+  }
+  wrap.classList.remove('hidden');
+  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  bar.style.width = pct + '%';
+  pctEl.textContent = total > 0 ? `${done} / ${total} (${pct}%)` : '—';
+  label.textContent = s.lastMessage || (s.running ? 'Generating…' : 'Done');
+}
+
+async function runInterlinkingSuggestions() {
+  const limEl = document.getElementById('il-limit');
+  const limit = Math.min(50, Math.max(1, parseInt(limEl && limEl.value ? limEl.value : '10', 10) || 10));
+  const redo = document.getElementById('il-redo') && document.getElementById('il-redo').checked;
+  const resume = !(redo) && (!document.getElementById('il-resume') || document.getElementById('il-resume').checked);
+  const problemScope = document.getElementById('il-filter') && document.getElementById('il-filter').value
+    ? document.getElementById('il-filter').value
+    : 'all';
+  const wpTypeEl = document.getElementById('il-wp-type-filter');
+  const wpType = wpTypeEl && wpTypeEl.value ? wpTypeEl.value : 'all';
+  const status = document.getElementById('il-run-status');
+  if (status) status.textContent = 'Starting…';
+  try {
+    const r = await postWithWriteAuth('/api/blog/interlinking/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit, resume, problemScope, wpType }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || data.message || 'Request failed');
+    if (status) status.textContent = data.started ? (data.message || 'Running…') : '';
+    if (!data.started) {
+      if (status) status.textContent = '';
+      ilHideRunProgress();
+      alert(data.message || 'Could not start interlinking job.');
+      return;
+    }
+    const st0 = data.state || {};
+    ilUpdateRunProgressFromState({
+      running: true,
+      processed: st0.processed != null ? st0.processed : 0,
+      total: st0.total != null ? st0.total : 0,
+      lastMessage: st0.lastMessage || 'Starting…',
+    });
+    ilPollInterlinkingUntilDone();
+  } catch (e) {
+    if (status) status.textContent = '';
+    ilHideRunProgress();
+    alert('Interlinking run failed: ' + String(e));
+  }
+}
+
+function ilPollInterlinkingUntilDone() {
+  if (ilPollTimer) clearInterval(ilPollTimer);
+  const tick = async () => {
+    try {
+      const s = await api('/api/blog/interlinking/run-state');
+      const st = document.getElementById('il-run-status');
+      if (st) st.textContent = s.running ? `${s.processed}/${s.total} · ${s.lastMessage || '…'}` : '';
+      ilUpdateRunProgressFromState(s);
+      if (!s.running) {
+        clearInterval(ilPollTimer);
+        ilPollTimer = null;
+        if (st) st.textContent = '';
+        await loadInterlinking();
+        ilHideRunProgress();
+      }
+    } catch {
+      clearInterval(ilPollTimer);
+      ilPollTimer = null;
+      ilHideRunProgress();
+    }
+  };
+  tick();
+  ilPollTimer = setInterval(tick, 2000);
+}
+
+function ilSlugHref(slug) {
+  if (!slug || !ilData) return '';
+  const base = String(ilData.siteUrl || '').replace(/\/+$/, '');
+  if (!base) return '';
+  return base + '/' + String(slug).replace(/^\/+/, '');
+}
+
+function ilSlugLink(slug, className) {
+  const href = ilSlugHref(slug);
+  const cls = className || 'text-indigo-400 hover:text-indigo-300 underline font-mono text-sm';
+  if (!href) return `<span class="font-mono text-slate-300">${escHtml(String(slug))}</span>`;
+  return `<a href="${escHtml(href)}" target="_blank" rel="noopener noreferrer" class="${cls}">${escHtml(String(slug))}</a>`;
+}
+
+function ilTypeBadgeForSlug(slug) {
+  if (!ilData || !slug || !ilData.slugTypes) return '';
+  const t = ilData.slugTypes[slug];
+  if (!t || !t.wpTypeLabel) return '<span class="text-[10px] text-slate-600 ml-1" title="Type unknown for this slug">· ?</span>';
+  return `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 ml-1 align-middle" title="WordPress content type">${escHtml(t.wpTypeLabel)}</span>`;
+}
+
+function ilNodeWpTypes(n) {
+  return Array.isArray(n.wpTypes) && n.wpTypes.length ? n.wpTypes : ['post'];
+}
+
+function ilSetProgressCounts(processed, linksApplied, orphansAddressed) {
+  const p = document.getElementById('il-count-processed');
+  const l = document.getElementById('il-count-links');
+  const o = document.getElementById('il-count-orphans-fixed');
+  if (p) p.textContent = processed == null ? '—' : String(processed);
+  if (l) l.textContent = linksApplied == null ? '—' : String(linksApplied);
+  if (o) o.textContent = orphansAddressed == null ? '—' : String(orphansAddressed);
+}
 
 async function loadInterlinking() {
-  document.getElementById('il-list').innerHTML = '<p class="text-slate-500">Loading…</p>';
+  document.getElementById('il-list').innerHTML = '<p class="text-slate-500"><span class="loading-spinner"></span> Loading…</p>';
+  ilSetCronHint(null);
+  ilSetProgressCounts(null, null, null);
   try {
     ilData = await api('/api/blog/interlinking');
-    const { stats, orphans, noInbound, weakInbound, suggestions, lastRun } = ilData;
+    const { orphans, noInbound, weakInbound, suggestions, lastRun, processedCount, siteUrl } = ilData;
 
-    document.getElementById('il-orphans').textContent = orphans.length;
-    document.getElementById('il-no-inbound').textContent = noInbound.length;
-    document.getElementById('il-weak').textContent = weakInbound.length;
-    document.getElementById('il-suggestions').textContent = Object.keys(suggestions).length;
+    document.getElementById('il-orphans').textContent = String(orphans.length);
+    document.getElementById('il-no-inbound').textContent = String(noInbound.length);
+    document.getElementById('il-weak').textContent = String(weakInbound.length);
     document.getElementById('il-last-run').textContent = lastRun
       ? `Claude suggestions generated: ${new Date(lastRun).toLocaleString()}`
-      : 'No Claude suggestions yet — run the interlinking agent to generate them.';
+      : 'No Claude suggestions in the database yet — use Generate suggestions (Claude) after WordPress sync, or the Python script above.';
 
-    // Show when the link graph was last updated by the cron
-    const lgUpdatedEl = document.getElementById('il-graph-updated');
-    if (lgUpdatedEl && ilData.lastGraphUpdated) {
-      lgUpdatedEl.textContent = `Link graph last updated by cron: ${new Date(ilData.lastGraphUpdated).toLocaleString()}`;
+    const hint = document.getElementById('il-site-url-hint');
+    if (hint) {
+      if (siteUrl && String(siteUrl).trim()) hint.classList.add('hidden');
+      else hint.classList.remove('hidden');
     }
 
+    const lgUpdatedEl = document.getElementById('il-graph-updated');
+    if (lgUpdatedEl) {
+      lgUpdatedEl.textContent = ilData.lastGraphUpdated
+        ? `Link graph last updated by cron: ${new Date(ilData.lastGraphUpdated).toLocaleString()}`
+        : '';
+    }
+
+    ilSetProgressCounts(processedCount != null ? processedCount : 0, null, null);
     ilApplyFilter();
-    loadInterlinkingChanges();
+    const ch = await loadInterlinkingChanges();
+    ilSetCronHint(ch && ch.changeLogHint ? ch.changeLogHint : null);
+    ilSetProgressCounts(
+      processedCount != null ? processedCount : 0,
+      ch && ch.totalApplied != null ? ch.totalApplied : 0,
+      ch && ch.articlesFixed != null ? ch.articlesFixed : 0,
+    );
   } catch(e) {
     document.getElementById('il-list').innerHTML = `<p class="text-red-400">${escHtml(String(e))}</p>`;
   }
+}
+
+function ilHasProcessedSuggestions(suggestions, id) {
+  const s = suggestions[id];
+  if (!s) return false;
+  const ins = Array.isArray(s.inbound) ? s.inbound.length : 0;
+  const outs = Array.isArray(s.outbound) ? s.outbound.length : 0;
+  return ins + outs > 0;
 }
 
 function ilApplyFilter() {
@@ -3013,16 +3314,39 @@ function ilApplyFilter() {
   const filter = document.getElementById('il-filter').value;
   const search = document.getElementById('il-search').value.toLowerCase();
 
-  let nodes = [];
-  if (filter === 'orphans') nodes = orphans;
-  else if (filter === 'no-inbound') nodes = noInbound;
-  else if (filter === 'weak') nodes = weakInbound;
-  else nodes = [...new Map([...orphans, ...noInbound, ...weakInbound].map(n => [n.id, n])).values()];
+  let bucket = [];
+  if (filter === 'orphans') bucket = orphans;
+  else if (filter === 'no-inbound') bucket = noInbound;
+  else if (filter === 'weak') bucket = weakInbound;
+  else bucket = [...new Map([...orphans, ...noInbound, ...weakInbound].map(n => [n.id, n])).values()];
 
-  if (search) nodes = nodes.filter(n => n.id.includes(search) || n.title.toLowerCase().includes(search));
+  let nodes = bucket.filter((n) => ilHasProcessedSuggestions(suggestions, n.id));
+  const typeF = document.getElementById('il-wp-type-filter') && document.getElementById('il-wp-type-filter').value;
+  if (typeF && typeF !== 'all') {
+    nodes = nodes.filter((n) => ilNodeWpTypes(n).includes(typeF));
+  }
+  if (search) {
+    nodes = nodes.filter(
+      (n) => n.id.includes(search) || (n.title && n.title.toLowerCase().includes(search)),
+    );
+  }
 
   const el = document.getElementById('il-list');
-  if (!nodes.length) { el.innerHTML = '<p class="text-slate-500">No pages match this filter.</p>'; return; }
+  if (!nodes.length) {
+    const anyProcessed = Object.keys(suggestions).some((k) => ilHasProcessedSuggestions(suggestions, k));
+    if (!anyProcessed) {
+      el.innerHTML =
+        '<p class="text-slate-500">No <em>processed</em> pages yet. Use <strong>Generate suggestions (Claude)</strong> or the Python script, then <strong>Refresh</strong>. Totals above still show the full graph.</p>';
+    } else if (search) {
+      el.innerHTML = '<p class="text-slate-500">No processed pages match this search.</p>';
+    } else if (bucket.length === 0) {
+      el.innerHTML = '<p class="text-slate-500">No pages in this category in the graph.</p>';
+    } else {
+      el.innerHTML =
+        '<p class="text-slate-500">No <em>processed</em> pages in this category yet. Unprocessed pages are included in the totals above.</p>';
+    }
+    return;
+  }
 
   el.innerHTML = nodes.map(n => {
     const sug = suggestions[n.id] || {};
@@ -3033,29 +3357,28 @@ function ilApplyFilter() {
     const tagText  = isOrphan ? '#f87171' : n.inbound === 0 ? '#fb923c' : '#a8a29e';
     const tagLabel = isOrphan ? 'Orphan' : n.inbound === 0 ? 'No Inbound' : 'Weak';
 
-    let sugHtml = '';
-    if (inboundSug.length || outboundSug.length) {
-      sugHtml = `<div class="mt-2 space-y-1">`;
-      for (const s of inboundSug) {
-        sugHtml += `<div class="flex gap-2 text-xs"><span class="text-green-500 shrink-0">← inbound</span><span class="text-slate-400">${escHtml(s.source_slug)}</span><span class="text-slate-600">anchor: "${escHtml(s.anchor_text)}"</span></div>`;
-        sugHtml += `<div class="text-xs text-slate-600 pl-16 italic">${escHtml(s.placement_hint)}</div>`;
-      }
-      for (const s of outboundSug) {
-        sugHtml += `<div class="flex gap-2 text-xs"><span class="text-blue-500 shrink-0">→ outbound</span><span class="text-slate-400">${escHtml(s.target_slug)}</span><span class="text-slate-600">anchor: "${escHtml(s.anchor_text)}"</span></div>`;
-        sugHtml += `<div class="text-xs text-slate-600 pl-16 italic">${escHtml(s.placement_hint)}</div>`;
-      }
-      sugHtml += `</div>`;
-    } else {
-      sugHtml = `<p class="text-xs text-slate-600 mt-1">No suggestions yet — run: <code class="text-indigo-400">python3 blog_automation/interlinking_agent.py --limit 20</code></p>`;
+    let sugHtml = `<div class="mt-2 space-y-1">`;
+    for (const s of inboundSug) {
+      sugHtml += `<div class="flex gap-2 text-xs flex-wrap items-baseline"><span class="text-green-500 shrink-0">← inbound</span><span class="inline-flex items-center">${ilSlugLink(s.source_slug)}${ilTypeBadgeForSlug(s.source_slug)}</span><span class="text-slate-600">anchor: "${escHtml(s.anchor_text)}"</span></div>`;
+      sugHtml += `<div class="text-xs text-slate-600 pl-16 italic">${escHtml(s.placement_hint)}</div>`;
     }
+    for (const s of outboundSug) {
+      sugHtml += `<div class="flex gap-2 text-xs flex-wrap items-baseline"><span class="text-blue-500 shrink-0">→ outbound</span><span class="inline-flex items-center">${ilSlugLink(s.target_slug)}${ilTypeBadgeForSlug(s.target_slug)}</span><span class="text-slate-600">anchor: "${escHtml(s.anchor_text)}"</span></div>`;
+      sugHtml += `<div class="text-xs text-slate-600 pl-16 italic">${escHtml(s.placement_hint)}</div>`;
+    }
+    sugHtml += `</div>`;
+
+    const typeBadgeHtml = n.wpTypeLabel
+      ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">${escHtml(n.wpTypeLabel)}</span>`
+      : ilTypeBadgeForSlug(n.id);
 
     return `<div class="card mb-3">
       <div class="flex items-start gap-3">
         <span class="badge shrink-0" style="background:${tagColor};color:${tagText}">${tagLabel}</span>
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
-            <span class="font-mono text-sm text-slate-200">${escHtml(n.id)}</span>
-            <span class="text-xs text-slate-500">${escHtml(n.category.replace(/-/g,' '))}</span>
+            <span class="inline-flex items-center gap-1">${ilSlugLink(n.id)}${typeBadgeHtml}</span>
+            <span class="text-xs text-slate-500">${escHtml(String(n.category || 'uncategorized').replace(/-/g,' '))}</span>
             <span class="text-xs text-slate-600">↓${n.inbound} ↑${n.outbound}</span>
           </div>
           <div class="text-xs text-slate-500 mt-0.5 truncate">${escHtml(n.title)}</div>
@@ -3066,20 +3389,36 @@ function ilApplyFilter() {
   }).join('');
 }
 
+async function ilRefreshChangesOnly() {
+  const ch = await loadInterlinkingChanges();
+  ilSetCronHint(ch && ch.changeLogHint ? ch.changeLogHint : null);
+  if (ilData && ilData.processedCount != null) {
+    ilSetProgressCounts(ilData.processedCount, ch.totalApplied ?? 0, ch.articlesFixed ?? 0);
+  } else if (ch) {
+    ilSetProgressCounts(null, ch.totalApplied ?? 0, ch.articlesFixed ?? 0);
+  }
+}
+
 // ── Interlinking Change Log ───────────────────────────────────────────
 async function loadInterlinkingChanges() {
   const el = document.getElementById('il-changes-list');
   el.innerHTML = '<p class="text-xs text-slate-600">Loading…</p>';
+  const empty = { changes: [], totalApplied: 0, articlesFixed: 0, changeLogHint: null };
   try {
     const data = await api('/api/blog/interlinking-changes');
-    const { changes, totalApplied, articlesFixed } = data;
+    const { changes, totalApplied, articlesFixed, changeLogHint } = data;
+    const ta = totalApplied != null ? totalApplied : 0;
+    const af = articlesFixed != null ? articlesFixed : 0;
+    const hint = changeLogHint != null && String(changeLogHint).trim() ? String(changeLogHint).trim() : null;
     if (!changes || !changes.length) {
-      el.innerHTML = '<p class="text-xs text-slate-600">No changes recorded yet. The cron runs every 6 hours.</p>';
-      return;
+      el.innerHTML = hint
+        ? `<p class="text-xs text-slate-500">${escHtml(hint)}</p>`
+        : '<p class="text-xs text-slate-600">No rows in <code class="text-slate-500">interlinking_changes</code> yet. Links applied by your interlinking cron will show here.</p>';
+      return { ...empty, totalApplied: ta, articlesFixed: af, changeLogHint: hint };
     }
     const summaryHtml = `<div class="flex gap-4 mb-3 text-xs text-slate-400">
-      <span><span class="text-indigo-400 font-semibold">${totalApplied}</span> links applied</span>
-      <span><span class="text-green-400 font-semibold">${articlesFixed}</span> orphans addressed</span>
+      <span><span class="text-indigo-400 font-semibold">${ta}</span> links applied</span>
+      <span><span class="text-green-400 font-semibold">${af}</span> orphans addressed</span>
     </div>`;
 
     // Group by orphan_slug
@@ -3099,17 +3438,17 @@ async function loadInterlinkingChanges() {
              </span>`
           : '<span class="text-slate-700" style="font-size:10px">GSC pending</span>';
         const arrow = l.direction === 'inbound'
-          ? `<span class="text-green-500">←</span> <span class="text-slate-400">${escHtml(l.source_slug)}</span>`
-          : `<span class="text-blue-400">→</span> <span class="text-slate-400">${escHtml(l.target_slug)}</span>`;
-        return `<div class="flex items-center gap-2 py-0.5">
+          ? `<span class="text-green-500">←</span> <span class="inline-flex items-center">${ilSlugLink(l.source_slug, 'text-indigo-400 hover:text-indigo-300 underline font-mono text-xs')}${ilTypeBadgeForSlug(l.source_slug)}</span>`
+          : `<span class="text-blue-400">→</span> <span class="inline-flex items-center">${ilSlugLink(l.target_slug, 'text-indigo-400 hover:text-indigo-300 underline font-mono text-xs')}${ilTypeBadgeForSlug(l.target_slug)}</span>`;
+        return `<div class="flex flex-wrap items-center gap-x-2 gap-y-1 py-0.5">
           ${arrow}
           <span class="text-slate-600" style="font-size:10px">anchor: "${escHtml(l.anchor_text || '')}"</span>
           ${clicksDelta}
         </div>`;
       }).join('');
       return `<div class="border border-slate-800 rounded p-3 mb-2">
-        <div class="flex items-center gap-3 mb-1">
-          <span class="font-mono text-sm text-slate-200">${escHtml(orphan)}</span>
+        <div class="flex items-center gap-3 mb-1 flex-wrap">
+          <span class="inline-flex items-center">${ilSlugLink(orphan, 'font-mono text-sm text-slate-200 hover:text-indigo-300 underline')}${ilTypeBadgeForSlug(orphan)}</span>
           <span class="text-xs text-slate-600">${d} ${t}</span>
           ${commitHtml}
         </div>
@@ -3117,8 +3456,10 @@ async function loadInterlinkingChanges() {
       </div>`;
     }).join('');
     el.innerHTML = summaryHtml + rows;
+    return { changes, totalApplied: ta, articlesFixed: af, changeLogHint: null };
   } catch(e) {
     el.innerHTML = `<p class="text-red-400 text-xs">${escHtml(String(e))}</p>`;
+    return empty;
   }
 }
 
@@ -3250,7 +3591,7 @@ function connectSSE() {
     const lgEl = document.getElementById('lg-last-updated');
     if (lgEl) lgEl.textContent = `Graph last updated by interlinking cron: ${timeStr}`;
     const ilEl = document.getElementById('il-graph-updated');
-    if (ilEl) ilEl.textContent = `Link graph last updated by cron: ${timeStr}`;
+    if (ilEl && ilData) ilEl.textContent = `Link graph last updated by cron: ${timeStr}`;
 
     // Flash the live badge on Link Graph section
     const badge = document.getElementById('lg-live-badge');
@@ -3261,7 +3602,6 @@ function connectSSE() {
 
     // Reload whichever section is currently visible
     if (currentSection === 'blog-links') loadLinkGraph();
-    if (currentSection === 'blog-interlinking') loadInterlinking();
   });
 
   sseSource.onerror = () => {
@@ -3540,6 +3880,33 @@ async function loadBlogQuota() {
 // ============================================================
 // WordPress Sync
 // ============================================================
+async function deleteWpSyncedRow(wpId, wpType) {
+  if (!confirm(`Remove this entry from the dashboard database only (does not delete on WordPress)?\n\n${wpType} #${wpId}`)) return;
+  try {
+    const r = await postWithWriteAuth('/api/blog/wp-articles/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wp_id: wpId, wp_type: wpType }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || data.message || 'Delete failed');
+    await loadWpSync();
+  } catch (e) {
+    alert('Delete failed: ' + String(e));
+  }
+}
+
+async function rebuildWpGraphFromSyncPage() {
+  try {
+    const r = await postWithWriteAuth('/api/blog/wp-graph/rebuild', { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || data.message || 'Graph rebuild failed');
+    await loadWpSync();
+  } catch (e) {
+    alert('Graph rebuild failed: ' + String(e));
+  }
+}
+
 async function runWpSync() {
   try {
     const r = await postWithWriteAuth('/api/blog/wp-sync/run', { method: 'POST' });
@@ -3602,7 +3969,7 @@ async function loadWpArticles(page = wpsPage) {
   const pageLabel = document.getElementById('wps-page-label');
   const prevBtn = document.getElementById('wps-page-prev');
   const nextBtn = document.getElementById('wps-page-next');
-  body.innerHTML = '<tr><td colspan="7" class="py-4 text-slate-500"><span class="loading-spinner"></span>Loading…</td></tr>';
+  body.innerHTML = '<tr><td colspan="8" class="py-4 text-slate-500"><span class="loading-spinner"></span>Loading…</td></tr>';
 
   try {
     const data = await api('/api/blog/wp-articles?' + params.toString());
@@ -3623,7 +3990,7 @@ async function loadWpArticles(page = wpsPage) {
     nextBtn.style.opacity = nextBtn.disabled ? '0.45' : '1';
 
     if (!data.articles || data.articles.length === 0) {
-      body.innerHTML = '<tr><td colspan="7" class="py-4 text-slate-500">No records found.</td></tr>';
+      body.innerHTML = '<tr><td colspan="8" class="py-4 text-slate-500">No records found.</td></tr>';
       return;
     }
     body.innerHTML = data.articles.map((a) => {
@@ -3634,6 +4001,8 @@ async function loadWpArticles(page = wpsPage) {
       } catch {
         catText = '';
       }
+      const wid = Number(a.wp_id);
+      const wtype = String(a.wp_type || '');
       return `<tr class="border-b border-slate-800">
         <td class="py-2 pr-3 text-slate-300">${escHtml(a.wp_type || '')}</td>
         <td class="py-2 pr-3 text-slate-400">${escHtml(a.status || '')}</td>
@@ -3645,12 +4014,15 @@ async function loadWpArticles(page = wpsPage) {
         }</td>
         <td class="py-2 pr-3 text-right text-slate-300">${a.inbound_links || 0}</td>
         <td class="py-2 pr-3 text-right text-slate-300">${a.outbound_links || 0}</td>
-        <td class="py-2 text-slate-400">${escHtml(catText)}</td>
+        <td class="py-2 pr-3 text-slate-400">${escHtml(catText)}</td>
+        <td class="py-2 text-right">
+          <button type="button" class="btn btn-xs" style="background:#7f1d1d;color:#fecaca;font-size:11px;padding:2px 8px;" onclick='deleteWpSyncedRow(${wid}, ${JSON.stringify(wtype)})'>Delete</button>
+        </td>
       </tr>`;
     }).join('');
   } catch (e) {
     pageSummary.textContent = 'Failed to load records';
-    body.innerHTML = `<tr><td colspan="7" class="py-4 text-red-400">${escHtml(String(e))}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" class="py-4 text-red-400">${escHtml(String(e))}</td></tr>`;
   }
 }
 
@@ -3737,10 +4109,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (currentSection === 'blog') loadBlog();
     if (currentSection === 'blog-wp-sync') loadWpSync();
     if (currentSection === 'blog-links') loadLinkGraph();
-    if (currentSection === 'blog-interlinking') {
-      loadInterlinking();
-      loadInterlinkingChanges();
-    }
     if (currentSection === 'blog-cannibalism') loadCannibalism();
   }, syncPageRefreshMs);
 });

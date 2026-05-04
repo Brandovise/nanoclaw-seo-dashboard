@@ -10,7 +10,6 @@ import { log } from './logger.js';
 let pathsReady = false;
 let WP_SYNC_ROOT: string;
 let WP_SYNC_DB: string;
-let WP_SYNC_CSV: string;
 let WP_SYNC_RAW_DIR: string;
 let WP_SYNC_CONTENT_DIR: string;
 let WP_SYNC_GRAPHIFY_DIR: string;
@@ -23,7 +22,6 @@ export function initWordpressModule(cfg: AppConfig): void {
   const out = process.env.WP_SYNC_OUTPUT_DIR || 'dashboard/data/wp-sync';
   WP_SYNC_ROOT = resolve(out);
   WP_SYNC_DB = cfg.DASHBOARD_SQLITE_PATH;
-  WP_SYNC_CSV = path.join(WP_SYNC_ROOT, 'wp_articles.csv');
   WP_SYNC_RAW_DIR = path.join(WP_SYNC_ROOT, 'raw');
   WP_SYNC_CONTENT_DIR = path.join(WP_SYNC_ROOT, 'content');
   WP_SYNC_GRAPHIFY_DIR = path.join(WP_SYNC_ROOT, 'graphify-workspace');
@@ -35,7 +33,7 @@ export function initWordpressModule(cfg: AppConfig): void {
   wpDb = null;
   pathsReady = true;
   log.info(
-    { wpSyncRoot: WP_SYNC_ROOT, sqlite: WP_SYNC_DB, csv: WP_SYNC_CSV, graphHtml: WP_SYNC_GRAPH_HTML },
+    { wpSyncRoot: WP_SYNC_ROOT, sqlite: WP_SYNC_DB, graphHtml: WP_SYNC_GRAPH_HTML },
     'wordpress sync paths set',
   );
 }
@@ -105,7 +103,6 @@ interface SyncResult {
   fetched: number;
   upserted: number;
   errors: number;
-  csvPath: string | null;
   graph: {
     nodes: number;
     edges: number;
@@ -268,13 +265,6 @@ function cleanHtml(html: string): string {
     .replace(/&gt;/g, '>')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function csvEscape(v: string): string {
-  if (v.includes('"') || v.includes(',') || v.includes('\n')) {
-    return `"${v.replace(/"/g, '""')}"`;
-  }
-  return v;
 }
 
 function hashRecord(record: WpArticleRecord): string {
@@ -527,8 +517,8 @@ function safePathSegment(input: string): string {
   return cleaned || 'unknown';
 }
 
-function contentFileName(row: WpArticleRecord): string {
-  return `${safePathSegment(row.wp_type)}__${safePathSegment(row.status)}__${safePathSegment(row.slug)}__${row.wp_id}.html`;
+function contentFileName(wpType: string, status: string, slug: string, wpId: number): string {
+  return `${safePathSegment(wpType)}__${safePathSegment(status)}__${safePathSegment(slug)}__${wpId}.html`;
 }
 
 function writeStructuredSnapshot(rows: WpArticleRecord[]): Record<string, string> {
@@ -536,7 +526,7 @@ function writeStructuredSnapshot(rows: WpArticleRecord[]): Record<string, string
   fs.mkdirSync(WP_SYNC_CONTENT_DIR, { recursive: true });
   const map: Record<string, string> = {};
   for (const row of rows) {
-    const fileName = contentFileName(row);
+    const fileName = contentFileName(row.wp_type, row.status, row.slug, row.wp_id);
     const absolutePath = path.join(WP_SYNC_CONTENT_DIR, fileName);
     fs.writeFileSync(absolutePath, row.content_html || '', 'utf8');
     map[`${row.wp_type}:${row.wp_id}`] = absolutePath;
@@ -874,99 +864,6 @@ function buildLinkGraph(baseSiteUrl: string): {
   };
 }
 
-function writeCsvSnapshot(csvPath: string, contentPaths: Record<string, string>): void {
-  const db = getWpDb();
-  const rows = db
-    .prepare(
-      `
-    SELECT
-      a.wp_id, a.wp_type, a.status, a.slug, a.title, a.source_url,
-      a.author, a.excerpt, a.categories_json, a.tags_json, a.taxonomy_json, a.published_at, a.modified_at, a.last_synced_at,
-      COALESCE(outbound.cnt, 0) AS outbound_links,
-      COALESCE(inbound.cnt, 0) AS inbound_links
-    FROM wp_articles a
-    LEFT JOIN (
-      SELECT source_key, COUNT(*) cnt
-      FROM wp_links
-      WHERE is_internal = 1
-      GROUP BY source_key
-    ) outbound ON outbound.source_key = (a.wp_type || ':' || a.wp_id)
-    LEFT JOIN (
-      SELECT target_key, COUNT(*) cnt
-      FROM wp_links
-      WHERE is_internal = 1 AND target_key IS NOT NULL
-      GROUP BY target_key
-    ) inbound ON inbound.target_key = (a.wp_type || ':' || a.wp_id)
-    ORDER BY a.wp_type, a.slug
-  `,
-    )
-    .all() as Array<{
-    wp_id: number;
-    wp_type: string;
-    status: string;
-    slug: string;
-    title: string;
-    source_url: string;
-    author: string;
-    excerpt: string;
-    categories_json: string;
-    tags_json: string;
-    taxonomy_json: string;
-    published_at: string;
-    modified_at: string;
-    last_synced_at: string;
-    outbound_links: number;
-    inbound_links: number;
-  }>;
-
-  const header = [
-    'wp_id',
-    'type',
-    'status',
-    'slug',
-    'title',
-    'url',
-    'file_name',
-    'file_path',
-    'author',
-    'excerpt',
-    'categories',
-    'tags',
-    'taxonomy',
-    'inbound_links',
-    'outbound_links',
-    'published_at',
-    'modified_at',
-    'last_synced_at',
-  ];
-  const lines = [header.join(',')];
-  for (const r of rows) {
-    lines.push(
-      [
-        String(r.wp_id),
-        csvEscape(r.wp_type),
-        csvEscape(r.status),
-        csvEscape(r.slug),
-        csvEscape(r.title || ''),
-        csvEscape(r.source_url || ''),
-        csvEscape(path.basename(contentPaths[`${r.wp_type}:${r.wp_id}`] || '')),
-        csvEscape(contentPaths[`${r.wp_type}:${r.wp_id}`] || ''),
-        csvEscape(r.author || ''),
-        csvEscape(r.excerpt || ''),
-        csvEscape(r.categories_json || '[]'),
-        csvEscape(r.tags_json || '[]'),
-        csvEscape(r.taxonomy_json || '{}'),
-        String(r.inbound_links || 0),
-        String(r.outbound_links || 0),
-        csvEscape(r.published_at || ''),
-        csvEscape(r.modified_at || ''),
-        csvEscape(r.last_synced_at || ''),
-      ].join(','),
-    );
-  }
-  fs.writeFileSync(csvPath, `${lines.join('\n')}\n`, 'utf8');
-}
-
 function saveRawDump(runId: number, payload: unknown): string {
   const file = path.join(
     WP_SYNC_RAW_DIR,
@@ -982,7 +879,6 @@ export function getWpSyncState(): {
   apiRequestIntervalMs: number;
   outputRoot: string;
   dbPath: string;
-  csvPath: string;
   contentDir: string;
   graphHtmlPath: string;
   running: boolean;
@@ -1010,7 +906,6 @@ export function getWpSyncState(): {
     apiRequestIntervalMs: cfg.apiRequestIntervalMs,
     outputRoot: WP_SYNC_ROOT,
     dbPath: WP_SYNC_DB,
-    csvPath: WP_SYNC_CSV,
     contentDir: WP_SYNC_CONTENT_DIR,
     graphHtmlPath: WP_SYNC_GRAPH_HTML,
     running: wpSyncJob !== null,
@@ -1055,7 +950,6 @@ export async function runWpSync(): Promise<SyncResult> {
       fetched: 0,
       upserted: 0,
       errors: 1,
-      csvPath: null,
       graph: { nodes: 0, edges: 0, orphanCount: 0 },
     };
   }
@@ -1124,8 +1018,7 @@ export async function runWpSync(): Promise<SyncResult> {
 
     upserted = upsertArticles(db, allRows);
     const graph = buildLinkGraph(cfg.baseUrl);
-    const contentPaths = writeStructuredSnapshot(allRows);
-    writeCsvSnapshot(WP_SYNC_CSV, contentPaths);
+    writeStructuredSnapshot(allRows);
     saveRawDump(runId, rawDump);
     const graphify = runGraphifyBuild(allRows);
     if (!graphify.ok) {
@@ -1150,13 +1043,13 @@ export async function runWpSync(): Promise<SyncResult> {
       fetched,
       upserted,
       errors,
-      WP_SYNC_CSV,
+      null,
       totalTypes,
       processedTypes,
       runId,
     );
     log.info(
-      { runId, fetched, upserted, errors, csvPath: WP_SYNC_CSV, graphHtml: WP_SYNC_GRAPH_HTML },
+      { runId, fetched, upserted, errors, graphHtml: WP_SYNC_GRAPH_HTML },
       'wp_sync completed',
     );
 
@@ -1167,7 +1060,6 @@ export async function runWpSync(): Promise<SyncResult> {
       fetched,
       upserted,
       errors,
-      csvPath: WP_SYNC_CSV,
       graph,
     };
   } catch (err) {
@@ -1188,10 +1080,43 @@ export async function runWpSync(): Promise<SyncResult> {
       fetched,
       upserted,
       errors: errors + 1,
-      csvPath: null,
       graph: { nodes: 0, edges: 0, orphanCount: 0 },
     };
   }
+}
+
+export function deleteWpSyncedArticle(
+  wpId: number,
+  wpType: string,
+): { ok: boolean; notFound?: boolean; message: string } {
+  const id = Number(wpId);
+  const type = typeof wpType === 'string' ? wpType.trim() : '';
+  if (!Number.isFinite(id) || id <= 0 || !type) {
+    return { ok: false, message: 'Invalid wp_id or wp_type.' };
+  }
+  const db = getWpDb();
+  const row = db
+    .prepare(`SELECT wp_id, wp_type, status, slug FROM wp_articles WHERE wp_id = ? AND wp_type = ?`)
+    .get(id, type) as { wp_id: number; wp_type: string; status: string; slug: string } | undefined;
+  if (!row) {
+    return { ok: false, notFound: true, message: 'WordPress article not found in database.' };
+  }
+  const key = `${row.wp_type}:${row.wp_id}`;
+  const contentPath = path.join(WP_SYNC_CONTENT_DIR, contentFileName(row.wp_type, row.status, row.slug, row.wp_id));
+  try {
+    if (fs.existsSync(contentPath)) fs.unlinkSync(contentPath);
+  } catch {
+    // best-effort cleanup
+  }
+  const delLinks = db.prepare(`DELETE FROM wp_links WHERE source_key = ? OR target_key = ?`);
+  const delArticle = db.prepare(`DELETE FROM wp_articles WHERE wp_id = ? AND wp_type = ?`);
+  const tx = db.transaction(() => {
+    delLinks.run(key, key);
+    delArticle.run(row.wp_id, row.wp_type);
+  });
+  tx();
+  log.info({ wpId: row.wp_id, wpType: row.wp_type, slug: row.slug }, 'wp_articles row deleted from dashboard DB');
+  return { ok: true, message: `Removed ${row.wp_type} ${row.slug} from sync database.` };
 }
 
 export function listWpArticles(opts: {
@@ -1419,10 +1344,6 @@ export function getWpFeatureCoverage(input: {
     },
     missingInWp,
   };
-}
-
-export function getWpSyncCsvPath(): string {
-  return WP_SYNC_CSV;
 }
 
 export function getWpGraphHtmlPath(): string {

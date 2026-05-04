@@ -34,10 +34,7 @@ export function createBlogRouter(_cfg: AppConfig, _seo: Database.Database): Hono
   r.get('/api/blog/affiliates/history', (c) => j(c, { history: [] }));
   r.get('/api/blog/affiliates/refresh', (c) => j(c, { ok: true }));
   r.get('/api/blog/rewrite-queue', (c) => j(c, { items: [] }));
-  r.get('/api/blog/interlinking', (c) => j(c, { suggestions: [] }));
-  r.get('/api/blog/interlinking-changes', (c) => j(c, { changes: [] }));
   r.get('/api/blog/cannibalism', (c) => j(c, { gscGroups: [], structuralGroups: [], lastRun: null }));
-  r.post('/api/blog/invalidate-link-graph', (c) => j(c, { ok: true }));
 
   return r;
 }
