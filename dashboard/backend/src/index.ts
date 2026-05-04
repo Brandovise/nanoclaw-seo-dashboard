@@ -11,6 +11,7 @@ import { createNanoclawRouter } from './routes/nanoclaw.js';
 import { createBlogWordpressRouter } from './routes/blog-wordpress.js';
 import { createBlogSeoRouter } from './routes/blog-seo-routes.js';
 import { createDashboardSessionRouter } from './routes/dashboard-session-routes.js';
+import { createBlogInterlinkingRouter } from './routes/blog-interlinking.js';
 import { createBlogRouter } from './routes/blog-stub.js';
 
 const cfg = loadConfig();
@@ -44,6 +45,7 @@ app.route('/', createDashboardSessionRouter(cfg));
 app.route('/', createNanoclawRouter(cfg, seo));
 app.route('/', createBlogWordpressRouter(cfg, seo));
 app.route('/', createBlogSeoRouter(cfg, seo));
+app.route('/', createBlogInterlinkingRouter(cfg, seo));
 app.route('/', createBlogRouter(cfg, seo));
 
 serve(

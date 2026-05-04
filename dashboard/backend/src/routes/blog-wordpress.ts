@@ -1,7 +1,6 @@
 /**
  * Real WordPress REST sync + link graph (ported from incofin dashboard).
  */
-import fs from 'node:fs';
 import { Hono } from 'hono';
 import type Database from 'better-sqlite3';
 import type { AppConfig } from '../config.js';
@@ -9,9 +8,9 @@ import { log } from '../lib/logger.js';
 import { isWriteAuthorized } from '../lib/write-auth.js';
 import { resolveAuditList } from '../lib/blog-seo-helpers.js';
 import {
+  deleteWpSyncedArticle,
   getWpGraph,
   getWpFeatureCoverage,
-  getWpSyncCsvPath,
   getWpSyncState,
   listWpArticles,
   rebuildWpGraphHtml,
@@ -42,18 +41,25 @@ export function createBlogWordpressRouter(cfg: AppConfig, _seo: Database.Databas
     return c.json({ ...start, state: getWpSyncState() });
   });
 
-  r.get('/api/blog/wp-sync/csv', (c) => {
-    const csvPath = getWpSyncCsvPath();
-    if (!fs.existsSync(csvPath)) {
-      return c.json({ error: 'CSV snapshot not found. Run sync first.' }, 404);
+  r.post('/api/blog/wp-articles/delete', async (c) => {
+    if (!isWriteAuthorized(c, cfg)) {
+      return c.json({ error: 'Unauthorized write request' }, 401);
     }
-    return new Response(fs.createReadStream(csvPath) as unknown as BodyInit, {
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="wp_articles.csv"',
-        'Access-Control-Allow-Origin': '*',
-      },
-    });
+    const body = (await c.req.json().catch(() => ({}))) as { wp_id?: unknown; wp_type?: unknown };
+    const wpId = typeof body.wp_id === 'number' ? body.wp_id : parseInt(String(body.wp_id ?? ''), 10);
+    const wpType = typeof body.wp_type === 'string' ? body.wp_type : '';
+    try {
+      const result = deleteWpSyncedArticle(wpId, wpType);
+      if (result.notFound) {
+        return c.json({ error: result.message }, 404);
+      }
+      if (!result.ok) {
+        return c.json({ error: result.message }, 400);
+      }
+      return c.json({ ok: true, message: result.message });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
   });
 
   r.get('/api/blog/wp-articles', (c) => {
