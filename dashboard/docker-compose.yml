@@ -1,8 +1,19 @@
-# From repo root: docker compose -f dashboard/docker-compose.yml up
-# Or: cd dashboard && docker compose up
+# From repo root (recommended — picks up repo-root .env for build args):
+#   docker compose --env-file .env -f dashboard/docker-compose.yml build --no-cache api
+#   docker compose --env-file .env -f dashboard/docker-compose.yml up -d
+#
+# If you run from `dashboard/`, Compose only auto-reads `dashboard/.env` for variable substitution,
+# not `env_file: ../.env` (that only affects the running container). Use:
+#   docker compose --env-file ../.env build --no-cache api && docker compose --env-file ../.env up -d
+#
+# Content rewrite needs the **Claude Code** native CLI in the api image when INSTALL_CLAUDE_CODE=1
+# (see root .env), or bind-mount the host binary and set CLAUDE_CODE_EXECUTABLE.
 services:
   api:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        INSTALL_CLAUDE_CODE: ${INSTALL_CLAUDE_CODE:-0}
     env_file:
       - ../.env
     environment:

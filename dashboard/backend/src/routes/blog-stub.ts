@@ -33,7 +33,6 @@ export function createBlogRouter(_cfg: AppConfig, _seo: Database.Database): Hono
   r.get('/api/blog/affiliates', (c) => j(c, { affiliates: [] }));
   r.get('/api/blog/affiliates/history', (c) => j(c, { history: [] }));
   r.get('/api/blog/affiliates/refresh', (c) => j(c, { ok: true }));
-  r.get('/api/blog/rewrite-queue', (c) => j(c, { items: [] }));
   r.get('/api/blog/cannibalism', (c) => j(c, { gscGroups: [], structuralGroups: [], lastRun: null }));
 
   return r;

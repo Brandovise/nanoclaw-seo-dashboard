@@ -102,6 +102,12 @@ function fmtCost(c) {
   return '$' + c.toFixed(2);
 }
 
+/** Empty shape matching `/api/tokens` usage trees. */
+function emptyTokenUsage() {
+  const z = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, requests: 0 };
+  return { total: Object.assign({}, z), byModel: {}, byAgent: {}, byDay: {}, byAgentModel: {} };
+}
+
 function modelColor(model) {
   if (model.includes('opus')) return '#a78bfa';
   if (model.includes('sonnet')) return '#60a5fa';
@@ -112,7 +118,10 @@ function modelColor(model) {
 }
 
 function agentColor(label) {
+  if (label === 'admin-billing') return '#f472b6';
   if (label.startsWith('andy:')) return '#6366f1';
   if (label.startsWith('claude-code:')) return '#10b981';
+  if (label.startsWith('dashboard:')) return '#c084fc';
+  if (label.startsWith('group:')) return '#38bdf8';
   return '#94a3b8';
 }

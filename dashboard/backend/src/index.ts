@@ -12,12 +12,15 @@ import { createBlogWordpressRouter } from './routes/blog-wordpress.js';
 import { createBlogSeoRouter } from './routes/blog-seo-routes.js';
 import { createDashboardSessionRouter } from './routes/dashboard-session-routes.js';
 import { createBlogInterlinkingRouter } from './routes/blog-interlinking.js';
+import { createBlogRewritePipelineRouter } from './routes/blog-rewrite-pipeline.js';
 import { createBlogRouter } from './routes/blog-stub.js';
+import { dropLegacyRewriteQueueTables } from './lib/content-rewrite-pipeline.js';
 
 const cfg = loadConfig();
 initWordpressModule(cfg);
 const seo = initSeoDb(cfg.DASHBOARD_SQLITE_PATH);
 migrateSeoAuditJsonToDbIfNeeded(cfg, seo);
+dropLegacyRewriteQueueTables(cfg);
 
 function isPublicPath(method: string, path: string): boolean {
   if (path === '/health' || path === '/api/health') return true;
@@ -46,6 +49,7 @@ app.route('/', createNanoclawRouter(cfg, seo));
 app.route('/', createBlogWordpressRouter(cfg, seo));
 app.route('/', createBlogSeoRouter(cfg, seo));
 app.route('/', createBlogInterlinkingRouter(cfg, seo));
+app.route('/', createBlogRewritePipelineRouter(cfg, seo));
 app.route('/', createBlogRouter(cfg, seo));
 
 serve(

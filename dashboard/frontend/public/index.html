@@ -83,6 +83,23 @@
       <div class="card"><div class="stat-value" id="stat-tasks">—</div><div class="stat-label">Active tasks</div></div>
       <div class="card"><div class="stat-value" id="stat-agents">—</div><div class="stat-label">Active agents</div></div>
     </div>
+    <div class="card mb-6 border border-slate-800" id="dash-rq-card">
+      <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Blog rewrite pipeline</h2>
+          <p class="text-xs text-slate-600 mt-1">Live job progress (web search research + Claude). <a href="/blog.html" class="text-indigo-400 hover:underline">Blog dashboard</a> for controls &amp; queue.</p>
+        </div>
+        <span class="text-xs font-mono text-slate-500 whitespace-nowrap" id="dash-rq-run-meta">—</span>
+      </div>
+      <div class="flex justify-between text-xs text-slate-400 mb-1">
+        <span id="dash-rq-status">Loading…</span>
+        <span id="dash-rq-pct" class="tabular-nums">—</span>
+      </div>
+      <div class="w-full bg-slate-900 rounded-full h-3 overflow-hidden">
+        <div id="dash-rq-bar" class="h-full rounded-full transition-all duration-300" style="width:0%;background:linear-gradient(90deg,#4f46e5,#7c3aed)"></div>
+      </div>
+      <p class="text-xs text-slate-500 mt-2 truncate" id="dash-rq-slug"></p>
+    </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="card">
         <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Recent Messages</h2>
@@ -241,17 +258,20 @@
     <!-- Provider quota cards -->
     <div class="mb-2 flex items-center justify-between">
       <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Provider Quotas</h2>
-      <p class="text-xs text-slate-600">Rate % only if a vendor exposes it; usage/cost below is from local logs. Cached 5 min · <span id="quota-cached-at">—</span></p>
+      <p class="text-xs text-slate-600">Usage charts use Anthropic Admin API when <span class="font-mono">ANTHROPIC_ADMIN_KEY</span> is set; rate % only if a vendor exposes it. Cached 5 min · <span id="quota-cached-at">—</span></p>
     </div>
     <div id="quota-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-6">
       <div class="card text-slate-500 text-sm col-span-full">Loading…</div>
     </div>
 
+    <div id="tok-usage-banner" class="hidden mb-4 p-3 rounded-lg border border-amber-600/40 bg-amber-950/40 text-amber-100 text-sm"></div>
+
     <!-- Cost stat cards -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       <div class="card">
         <div class="stat-value text-indigo-400 text-2xl" id="tok-total-cost">—</div>
-        <div class="stat-label">Est. total cost</div>
+        <div class="stat-label">Total cost (Anthropic API)</div>
+        <p class="text-xs text-slate-500 mt-2 leading-relaxed">Organization-wide usage and cost from the admin API. NanoClaw and this dashboard share the same <span class="font-mono text-slate-400">ANTHROPIC_API_KEY</span>; totals are not split per app.</p>
       </div>
       <div class="card">
         <div class="stat-value text-blue-400 text-2xl" id="tok-total-input">—</div>
@@ -353,6 +373,7 @@ function navigate(section) {
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebar-overlay').classList.remove('open');
   }
+  if (currentSection === 'overview' && section !== 'overview') stopDashRewritePoll();
   document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   event.currentTarget.classList.add('active');
@@ -369,6 +390,79 @@ function navigate(section) {
   else if (section === 'skills') loadSkills();
   else if (section === 'tokens') { loadTokens(); loadQuota(); }
   else if (section === 'system-graph') loadSystemGraph();
+}
+
+// ============================================================
+// Overview — blog rewrite pipeline progress (same API as blog dashboard)
+// ============================================================
+let dashRewritePoll = null;
+function stopDashRewritePoll() {
+  if (dashRewritePoll) {
+    clearInterval(dashRewritePoll);
+    dashRewritePoll = null;
+  }
+}
+function startDashRewritePoll() {
+  if (dashRewritePoll) return;
+  dashRewritePoll = setInterval(refreshDashRewriteProgress, 4000);
+}
+
+function applyDashRewritePipelineUi(s) {
+  const statusEl = document.getElementById('dash-rq-status');
+  const bar = document.getElementById('dash-rq-bar');
+  const pctEl = document.getElementById('dash-rq-pct');
+  const slugEl = document.getElementById('dash-rq-slug');
+  const metaEl = document.getElementById('dash-rq-run-meta');
+  if (!statusEl || !bar || !pctEl) return;
+
+  const total = Number(s.total) || 0;
+  const processed = Number(s.processed) || 0;
+  const running = !!s.running;
+  const pct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+  bar.style.width =
+    total > 0 ? `${pct}%` : running ? '12%' : '0%';
+  pctEl.textContent =
+    total > 0 ? `${processed}/${total} (${pct}%)` : running ? 'starting…' : '—';
+  const slug = s.currentSlug ? String(s.currentSlug) : '';
+  if (slugEl) {
+    slugEl.textContent = running && slug ? `Current: ${slug}` : running ? 'Working…' : '';
+    slugEl.title = slug;
+  }
+  if (metaEl) {
+    if (s.run && typeof s.run.id !== 'undefined') {
+      metaEl.textContent = `Run #${s.run.id} · ${s.run.status || ''}`.trim();
+    } else {
+      metaEl.textContent = running ? 'running' : 'idle';
+    }
+  }
+  if (running) {
+    statusEl.textContent = s.message ? String(s.message) : 'Rewriting…';
+  } else if (s.message === 'completed') {
+    statusEl.textContent = 'Last run finished';
+  } else {
+    statusEl.textContent = s.message ? String(s.message) : 'Idle — no job running';
+  }
+}
+
+async function refreshDashRewriteProgress() {
+  const statusEl = document.getElementById('dash-rq-status');
+  const bar = document.getElementById('dash-rq-bar');
+  if (!statusEl || !bar) return;
+  try {
+    const s = await api('/api/blog/rewrite-pipeline/state');
+    applyDashRewritePipelineUi(s);
+    if (s.running) startDashRewritePoll();
+    else stopDashRewritePoll();
+  } catch (e) {
+    stopDashRewritePoll();
+    statusEl.textContent = 'Blog rewrite API unavailable';
+    document.getElementById('dash-rq-pct').textContent = '—';
+    bar.style.width = '0%';
+    const slugEl = document.getElementById('dash-rq-slug');
+    if (slugEl) { slugEl.textContent = ''; slugEl.title = ''; }
+    const metaEl = document.getElementById('dash-rq-run-meta');
+    if (metaEl) metaEl.textContent = '—';
+  }
 }
 
 // ============================================================
@@ -419,6 +513,8 @@ async function loadOverview() {
           <span class="text-xs text-slate-600 flex-shrink-0">${fmtTime(l.run_at)}</span>
         </div>`).join('');
     }
+
+    refreshDashRewriteProgress();
   } catch(e) {
     console.error('Overview error:', e);
   }
@@ -965,65 +1061,6 @@ function sgRender(data) {
 // ============================================================
 // Token Usage
 // ============================================================
-function summarizeBillingForUsage(anthropic, openai) {
-  const total = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, requests: 0 };
-  const byModel = {};
-  const byAgent = {};
-  const byDay = {};
-  const byAgentModel = {};
-
-  const add = (day, model, input, output, cacheWrite, cacheRead, cost, requests) => {
-    const m = model || 'admin-api';
-    const a = 'admin-billing';
-    if (!byModel[m]) byModel[m] = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, requests: 0 };
-    if (!byAgent[a]) byAgent[a] = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, requests: 0 };
-    if (!byDay[day]) byDay[day] = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, requests: 0 };
-    if (!byAgentModel[a]) byAgentModel[a] = {};
-    if (!byAgentModel[a][m]) byAgentModel[a][m] = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, requests: 0 };
-    [total, byModel[m], byAgent[a], byDay[day], byAgentModel[a][m]].forEach(t => {
-      t.input += input; t.output += output; t.cacheWrite += cacheWrite; t.cacheRead += cacheRead; t.cost += cost; t.requests += requests;
-    });
-  };
-
-  (anthropic?.usage?.data || []).forEach(bucket => {
-    const day = (bucket.starting_at || '').slice(0, 10) || 'unknown';
-    // Anthropic API returns model at bucket level; results don't include it per-row
-    const bucketModel = bucket.model || bucket.model_name || 'anthropic';
-    (bucket.results || []).forEach(r => {
-      const input = Number(r.uncached_input_tokens || 0);
-      const output = Number(r.output_tokens || 0);
-      const cacheRead = Number(r.cache_read_input_tokens || 0);
-      const cacheWrite = Number(r.cache_creation?.ephemeral_1h_input_tokens || 0) + Number(r.cache_creation?.ephemeral_5m_input_tokens || 0);
-      const req = 1;
-      // Try result-level model first (future API versions), fall back to bucket model
-      const model = r.model || r.model_name || bucketModel;
-      add(day, model, input, output, cacheWrite, cacheRead, 0, req);
-    });
-  });
-  (anthropic?.cost?.data || []).forEach(bucket => {
-    const day = (bucket.starting_at || '').slice(0, 10) || 'unknown';
-    let dayCost = 0;
-    (bucket.results || []).forEach(r => { dayCost += (parseFloat(r.amount || '0') / 100); });
-    if (dayCost > 0) add(day, 'anthropic-cost', 0, 0, 0, 0, dayCost, 0);
-  });
-  (openai?.usage?.data || []).forEach(bucket => {
-    const day = (bucket.start_time_iso || '').slice(0, 10) || 'unknown';
-    (bucket.results || []).forEach(r => {
-      const input = Number(r.input_tokens || 0);
-      const output = Number(r.output_tokens || 0);
-      add(day, r.model || 'openai', input, output, 0, 0, 0, Number(r.num_model_requests || 1));
-    });
-  });
-  (openai?.cost?.data || []).forEach(bucket => {
-    const day = (bucket.start_time_iso || '').slice(0, 10) || 'unknown';
-    let dayCost = 0;
-    (bucket.results || []).forEach(r => { dayCost += Number(r.amount?.value || 0); });
-    if (dayCost > 0) add(day, 'openai-cost', 0, 0, 0, 0, dayCost, 0);
-  });
-
-  return { total, byModel, byAgent, byDay, byAgentModel };
-}
-
 async function loadTokens() {
   const period = document.getElementById('token-period').value;
   const [modelEl, agentEl, dailyEl, amEl] = ['tok-by-model','tok-by-agent','tok-daily','tok-agent-model'].map(id => document.getElementById(id));
@@ -1031,9 +1068,17 @@ async function loadTokens() {
 
   try {
     const data = await api('/api/tokens?period=' + period);
-    const { local, anthropic, openai } = data;
-    const localEmpty = !local || !local.total || Number(local.total.requests || 0) === 0;
-    const usage = localEmpty ? summarizeBillingForUsage(anthropic, openai) : local;
+    const banner = document.getElementById('tok-usage-banner');
+    if (banner) {
+      if (data.usageError) {
+        banner.classList.remove('hidden');
+        banner.textContent = data.usageError;
+      } else {
+        banner.classList.add('hidden');
+        banner.textContent = '';
+      }
+    }
+    const usage = data.usage && !data.usageError ? data.usage : emptyTokenUsage();
     const t = usage.total;
 
     // Stat cards
@@ -1075,7 +1120,7 @@ async function loadTokens() {
       return `<div class="mb-3">
         <div class="flex justify-between mb-1">
           <div class="flex items-center gap-1">
-            ${type === 'andy' ? '<span class="badge badge-blue text-xs">andy</span>' : '<span class="badge badge-green text-xs">claude-code</span>'}
+            ${label === 'admin-billing' ? '<span class="badge badge-green text-xs">org API</span>' : type === 'andy' ? '<span class="badge badge-blue text-xs">andy</span>' : type === 'dashboard' ? '<span class="badge badge-gray text-xs">dashboard</span>' : type === 'group' ? '<span class="badge badge-blue text-xs">nano</span>' : '<span class="badge badge-green text-xs">claude-code</span>'}
             <span class="text-xs text-slate-300">${escHtml(name)}</span>
           </div>
           <span class="text-xs font-semibold" style="color:${col}">${fmtCost(u.cost)}</span>
@@ -1100,7 +1145,7 @@ async function loadTokens() {
       const maxDayCost = Math.max(...days.map(([,u]) => u.cost)) || 1;
       dailyEl.innerHTML = `
         <table><thead><tr>
-          <th>Date</th><th>Input</th><th>Output</th><th>Cache Write</th><th>Cache Read</th><th>Requests</th><th>Est. Cost</th><th style="width:120px"></th>
+          <th>Date</th><th>Input</th><th>Output</th><th>Cache Write</th><th>Cache Read</th><th>Requests</th><th>Cost (API)</th><th style="width:120px"></th>
         </tr></thead>
         <tbody>${days.map(([day, u]) => `
           <tr>
@@ -1134,7 +1179,7 @@ async function loadTokens() {
           <tr>
             <td>
               <div class="flex items-center gap-1">
-                ${type === 'andy' ? '<span class="badge badge-blue" style="font-size:10px">andy</span>' : '<span class="badge badge-green" style="font-size:10px">cc</span>'}
+                ${label === 'admin-billing' ? '<span class="badge badge-green" style="font-size:10px">API</span>' : type === 'andy' ? '<span class="badge badge-blue" style="font-size:10px">andy</span>' : type === 'dashboard' ? '<span class="badge badge-gray" style="font-size:10px">dash</span>' : type === 'group' ? '<span class="badge badge-blue" style="font-size:10px">nano</span>' : '<span class="badge badge-green" style="font-size:10px">cc</span>'}
                 <span class="text-xs text-slate-300">${escHtml(name)}</span>
               </div>
             </td>
@@ -1149,6 +1194,7 @@ async function loadTokens() {
       </tbody></table>` : '<p class="text-slate-500 text-sm">No data.</p>';
 
     // --- Anthropic billing ---
+    const { anthropic, openai } = data;
     renderAnthropicBilling(anthropic, data.billingCachedAt);
     renderOpenAIBilling(openai);
 
@@ -1172,10 +1218,15 @@ function renderAnthropicBilling(data, cachedAt) {
   const statusEl = document.getElementById('tok-anthropic-status');
   const el = document.getElementById('tok-anthropic');
   if (!data) {
-    statusEl.textContent = 'fetching…';
-    statusEl.className = 'badge badge-yellow';
-    el.innerHTML = '<p class="text-slate-400 text-sm">⏳ Fetching from Anthropic API in background… refresh in ~20s</p>';
-    setTimeout(() => loadTokens(), 20000);
+    statusEl.textContent = 'optional';
+    statusEl.className = 'badge badge-gray';
+    el.innerHTML = '<p class="text-slate-400 text-sm">Set <span class="font-mono">ANTHROPIC_ADMIN_KEY</span> in the dashboard environment. Charts and org totals load only from Anthropic’s Usage and Cost admin APIs.</p>';
+    return;
+  }
+  if (data._error) {
+    statusEl.textContent = 'error';
+    statusEl.className = 'badge badge-red';
+    el.innerHTML = `<p class="text-red-400 text-sm">${escHtml(data._error)}</p>`;
     return;
   }
   statusEl.textContent = 'connected';

@@ -372,6 +372,7 @@ JSON only:
   ]
 }`;
 
+  const model = interlinkModel(cfg);
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -380,7 +381,7 @@ JSON only:
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: interlinkModel(cfg),
+      model,
       max_tokens: 1200,
       messages: [{ role: 'user', content: user }],
     }),

@@ -40,6 +40,7 @@ const LlmAuditSchema = z.object({
   geo_score: z.number().min(0).max(100),
   summary: z.string().optional(),
   checks: z.record(
+    z.string(),
     z.object({
       status: z.enum(['PASS', 'FAIL']),
       note: z.string().optional(),

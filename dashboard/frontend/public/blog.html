@@ -294,21 +294,73 @@
 
   <!-- Blog Rewrite Queue Section -->
   <div id="section-blog-queue" class="section p-6">
-    <h1 class="text-xl font-bold text-slate-100 mb-6">Rewrite Queue</h1>
+    <h1 class="text-xl font-bold text-slate-100 mb-2">Rewrite Queue</h1>
+    <p class="text-sm text-slate-500 mb-4 max-w-4xl">Articles below the SEO threshold are <strong class="text-slate-400">rewritten locally</strong> (research + planning + Markdown writer ↔ reviewer + MD→HTML). Review each result, then use <strong class="text-slate-400">Upload to WordPress</strong> when satisfied to create a duplicate <strong class="text-slate-400">draft</strong> (live post unchanged). <strong class="text-slate-400">Stop</strong> skips the rest of the batch after the current article. <strong class="text-slate-400">Clear staging</strong> removes all local rewritten files and the staging index (and drops legacy rewrite tables in SQLite if present); it does not delete anything in WordPress. Requires <code class="text-slate-400 bg-slate-900 px-1 rounded text-xs">ANTHROPIC_API_KEY</code> (web search enabled for your org), WordPress credentials for upload, and write token for runs/upload.</p>
+    <div class="card p-3 mb-4 flex flex-wrap items-center gap-3">
+      <label class="text-xs text-slate-400">SEO max (candidates below)</label>
+      <input type="number" id="rq-threshold" class="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-200" value="65" min="0" max="100" title="Articles with seo_score below this are candidates">
+      <label class="text-xs text-slate-400">Max articles</label>
+      <input type="number" id="rq-limit" class="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-200" value="5" min="1" max="100">
+      <label class="flex items-center gap-1 text-xs text-slate-400"><input type="checkbox" id="rq-dry-run"> Dry run (rewrite only; upload disabled)</label>
+      <button type="button" class="btn btn-primary btn-sm" id="rq-run-btn" onclick="runRewritePipeline()">Start pipeline</button>
+      <button type="button" class="btn btn-sm border border-slate-600 text-slate-200" id="rq-stop-btn" onclick="stopRewritePipeline()" disabled>Stop</button>
+      <button type="button" class="btn btn-sm border border-red-900/50 text-red-400" id="rq-clear-btn" onclick="clearRewriteStagingAll()">Clear staging</button>
+      <span class="text-xs text-slate-500 flex-1 min-w-[14rem]" id="rq-run-status"></span>
+    </div>
+    <div class="card p-4 mb-4">
+      <div class="flex justify-between text-xs text-slate-400 mb-1.5">
+        <span>Pipeline progress</span>
+        <span id="rq-progress-pct" class="tabular-nums">—</span>
+      </div>
+      <div class="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden">
+        <div id="rq-progress-bar" class="h-full bg-indigo-500 rounded-full transition-all duration-300" style="width:0%"></div>
+      </div>
+      <p class="text-xs text-slate-500 mt-2 font-mono truncate" id="rq-progress-slug" title=""></p>
+    </div>
+    <div class="card p-4 mb-4">
+      <div class="flex justify-between items-start gap-2 mb-2">
+        <div>
+          <div class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Live activity</div>
+          <p class="text-xs text-slate-500 mt-1 m-0 max-w-3xl">Transparent log: research → planning → <strong class="text-slate-400">Markdown</strong> writer ↔ reviewer → one-shot <strong class="text-slate-400">MD→HTML</strong> → save. Polls every few seconds while a run is active.</p>
+        </div>
+        <span class="text-xs font-mono text-indigo-300 max-w-[55%] text-right truncate shrink-0" id="rq-current-stage" title="">—</span>
+      </div>
+      <div id="rq-activity-log" class="rounded border border-slate-800 bg-slate-950/80 text-[11px] leading-relaxed max-h-64 overflow-y-auto p-2"></div>
+    </div>
+    <p class="text-xs text-slate-600 mb-4" id="rq-run-info">—</p>
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-      <div class="card lg:col-span-2">
+      <div class="card">
         <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider">Pending (<span id="rq-pending-count">…</span>)</h2>
-        <div id="rq-pending" style="max-height:350px;overflow-y:auto">Loading…</div>
+        <div id="rq-pending" style="max-height:280px;overflow-y:auto">Loading…</div>
+      </div>
+      <div class="card border-amber-500/20">
+        <h2 class="text-sm font-semibold text-amber-400/90 mb-4 uppercase tracking-wider">Ready for WordPress (<span id="rq-ready-count">0</span>)</h2>
+        <p class="text-xs text-slate-500 mb-2">Review HTML, then upload to create a draft.</p>
+        <div id="rq-ready" style="max-height:280px;overflow-y:auto">—</div>
       </div>
       <div class="card">
         <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider text-red-400">Failed (<span id="rq-failed-count">0</span>)</h2>
-        <div id="rq-failed" style="max-height:350px;overflow-y:auto">Loading…</div>
+        <div id="rq-failed" style="max-height:280px;overflow-y:auto">Loading…</div>
       </div>
     </div>
     <div class="card">
-      <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider text-green-400">Completed (<span id="rq-done-count">…</span>)</h2>
+      <h2 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wider text-green-400">On WordPress (<span id="rq-done-count">…</span>)</h2>
       <div id="rq-done" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2" style="max-height:300px;overflow-y:auto">Loading…</div>
     </div>
+    <dialog id="rq-preview-dialog" class="rounded-xl border border-slate-700 bg-slate-900 text-slate-200 shadow-xl max-w-5xl w-[95vw] max-h-[92vh] p-0">
+      <div class="flex flex-col max-h-[92vh]">
+        <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800">
+          <h3 id="rq-preview-title" class="text-sm font-semibold text-slate-100 truncate pr-2">Preview</h3>
+          <button type="button" class="btn btn-sm" onclick="closeRewritePreview()">Close</button>
+        </div>
+        <div class="overflow-y-auto flex-1 px-4 py-3 space-y-3">
+          <details class="text-xs"><summary class="cursor-pointer text-slate-400">Research notes</summary><pre id="rq-preview-research" class="mt-2 p-2 bg-slate-950 rounded text-slate-300 whitespace-pre-wrap max-h-40 overflow-auto"></pre></details>
+          <details class="text-xs"><summary class="cursor-pointer text-slate-400">Diagnosis (JSON)</summary><pre id="rq-preview-diagnosis" class="mt-2 p-2 bg-slate-950 rounded text-slate-300 whitespace-pre-wrap max-h-40 overflow-auto"></pre></details>
+          <div class="text-xs text-slate-500">Rendered (approximate)</div>
+          <iframe id="rq-preview-iframe" class="w-full min-h-[45vh] bg-white rounded border border-slate-700" sandbox="allow-same-origin"></iframe>
+        </div>
+      </div>
+    </dialog>
   </div>
 
   <!-- Blog Performance Section -->
@@ -1000,17 +1052,20 @@
     <!-- Provider quota cards -->
     <div class="mb-2 flex items-center justify-between">
       <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Provider Quotas</h2>
-      <p class="text-xs text-slate-600">Per-provider rate % is only shown when a vendor exposes it; token spend above is from local usage logs. Cached 5 min · <span id="blog-quota-cached-at">—</span></p>
+      <p class="text-xs text-slate-600">Usage charts use Anthropic Admin API when <span class="font-mono">ANTHROPIC_ADMIN_KEY</span> is set; rate % only if a vendor exposes it. · <span id="blog-quota-cached-at">—</span></p>
     </div>
     <div id="blog-quota-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-6">
       <div class="card text-slate-500 text-sm col-span-full">Loading…</div>
     </div>
 
+    <div id="blog-tok-usage-banner" class="hidden mb-4 p-3 rounded-lg border border-amber-600/40 bg-amber-950/40 text-amber-100 text-sm"></div>
+
     <!-- Cost stat cards -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       <div class="card">
         <div class="stat-value text-indigo-400 text-2xl" id="blog-tok-total-cost">—</div>
-        <div class="stat-label">Est. total cost</div>
+        <div class="stat-label">Total cost (Anthropic API)</div>
+        <p class="text-xs text-slate-500 mt-2 leading-relaxed">Organization-wide usage and cost from the admin API. NanoClaw and this dashboard share the same <span class="font-mono text-slate-400">ANTHROPIC_API_KEY</span>; totals are not split per app.</p>
       </div>
       <div class="card">
         <div class="stat-value text-blue-400 text-2xl" id="blog-tok-total-input">—</div>
@@ -1091,10 +1146,11 @@ function navigate(section) {
   document.getElementById('section-' + section).classList.add('active');
   currentSection = section;
   if (prevSection === 'blog-audit' && section !== 'blog-audit') stopAuditStatusPoll();
+  if (prevSection === 'blog-queue' && section !== 'blog-queue') stopRewriteQueuePoll();
 
   if (section === 'blog') loadBlog();
   else if (section === 'blog-audit') { loadAudit(); initAuditRunPanel(); }
-  else if (section === 'blog-queue') loadBlogQueue();
+  else if (section === 'blog-queue') { loadBlogQueue(); initRewriteQueuePanel(); }
   else if (section === 'blog-perf') loadPerformance();
   else if (section === 'blog-agents') loadBlogAgents();
   else if (section === 'blog-links') loadLinkGraph();
@@ -1735,39 +1791,435 @@ function auditNext() { if (auditOffset + auditLimit < auditTotal) { auditOffset 
 // ============================================================
 // Blog Rewrite Queue
 // ============================================================
-async function loadBlogQueue() {
+let rewriteQueuePoll = null;
+
+function updateRqControlButtons(s) {
+  const start = document.getElementById('rq-run-btn');
+  const stop = document.getElementById('rq-stop-btn');
+  const running = !!(s && s.running);
+  if (start) start.disabled = running;
+  if (stop) stop.disabled = !running;
+}
+
+async function refreshRewritePipelineControls() {
+  try {
+    const s = await api('/api/blog/rewrite-pipeline/state');
+    updateRqControlButtons(s);
+    updateRqProgressBar(s);
+    updateRqActivityLog(s);
+    return s;
+  } catch (e) {
+    updateRqControlButtons({ running: false });
+    updateRqProgressBar({ running: false, total: 0, processed: 0 });
+    updateRqActivityLog({ running: false, progressLog: [], stage: 'idle', stageDetail: null });
+    return null;
+  }
+}
+
+function rqHumanizeStage(stage) {
+  const m = {
+    orchestrator: 'Orchestrator',
+    research: 'Research',
+    diagnosis: 'Planning',
+    writer: 'Writer',
+    reviewer: 'Reviewer',
+    formatter: 'MD→HTML',
+    persist: 'Save',
+    idle: 'Idle',
+  };
+  return m[stage] || (stage ? String(stage) : '—');
+}
+function rqStageBadgeClass(stage) {
+  const m = {
+    orchestrator: 'bg-slate-700 text-slate-200',
+    research: 'bg-sky-900/80 text-sky-200',
+    diagnosis: 'bg-violet-900/60 text-violet-200',
+    writer: 'bg-emerald-900/60 text-emerald-200',
+    reviewer: 'bg-amber-900/60 text-amber-200',
+    formatter: 'bg-cyan-900/70 text-cyan-200',
+    persist: 'bg-teal-900/60 text-teal-200',
+    idle: 'bg-slate-800 text-slate-400',
+  };
+  return m[stage] || 'bg-slate-800 text-slate-300';
+}
+
+function updateRqActivityLog(s) {
+  const wrap = document.getElementById('rq-activity-log');
+  const stageHdr = document.getElementById('rq-current-stage');
+  if (!wrap) return;
+  const entries = Array.isArray(s && s.progressLog) ? s.progressLog : [];
+  const running = !!(s && s.running);
+  if (stageHdr) {
+    const det = (s && s.stageDetail) ? String(s.stageDetail) : '';
+    const st = (s && s.stage) ? String(s.stage) : 'idle';
+    stageHdr.title = det || '';
+    if (running) {
+      stageHdr.textContent = rqHumanizeStage(st) + (det ? ' — ' + det : '');
+      stageHdr.className = 'text-xs font-mono text-indigo-300 max-w-[55%] text-right truncate shrink-0';
+    } else {
+      stageHdr.textContent =
+        st === 'idle'
+          ? (entries.length ? 'Idle · log from last run' : 'Idle')
+          : rqHumanizeStage(st) + (det ? ' — ' + det : '');
+      stageHdr.className = 'text-xs font-mono text-slate-500 max-w-[55%] text-right truncate shrink-0';
+    }
+  }
+  if (entries.length === 0) {
+    wrap.innerHTML =
+      '<p class="text-slate-600 text-xs m-0 py-2">No pipeline activity yet. Start a run to see agent stages here.</p>';
+    return;
+  }
+  wrap.innerHTML = entries
+    .map((e) => {
+      const t = e.at
+        ? new Date(e.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : '';
+      const slugPart = e.slug ? ` <span class="text-slate-500">· ${escHtml(String(e.slug))}</span>` : '';
+      const badge = `<span class="inline-block px-1.5 py-0.5 rounded ${rqStageBadgeClass(e.stage)} mr-1.5 align-top">${escHtml(rqHumanizeStage(e.stage))}</span>`;
+      return `<div class="flex flex-wrap gap-x-2 items-baseline border-b border-slate-800/80 pb-1.5 mb-1.5 last:border-0">${badge}<span class="text-slate-500 shrink-0 tabular-nums">${escHtml(t)}</span><span class="text-slate-300 flex-1 min-w-[10rem]">${escHtml(e.message)}${slugPart}</span></div>`;
+    })
+    .join('');
+  if (running) wrap.scrollTop = wrap.scrollHeight;
+}
+
+function updateRqProgressBar(s) {
+  const bar = document.getElementById('rq-progress-bar');
+  const pctEl = document.getElementById('rq-progress-pct');
+  const slugEl = document.getElementById('rq-progress-slug');
+  if (!bar || !pctEl) return;
+  const total = Number(s.total) || 0;
+  const processed = Number(s.processed) || 0;
+  const running = !!s.running;
+  const pct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+  bar.style.width = total > 0 ? `${pct}%` : running ? '12%' : '0%';
+  pctEl.textContent =
+    total > 0 ? `${processed}/${total} (${pct}%)` : running ? 'starting…' : 'Idle';
+  if (slugEl) {
+    const slug = s.currentSlug ? String(s.currentSlug) : '';
+    const st = s.stage && s.stage !== 'idle' ? rqHumanizeStage(String(s.stage)) : '';
+    const sub = running && st && slug ? `${st} · ${slug}` : running && slug ? `Current: ${slug}` : running && st ? st : running ? 'Working…' : '';
+    slugEl.textContent = sub;
+    slugEl.title = slug || '';
+  }
+}
+
+function stopRewriteQueuePoll() {
+  if (rewriteQueuePoll) {
+    clearInterval(rewriteQueuePoll);
+    rewriteQueuePoll = null;
+  }
+}
+
+async function initRewriteQueuePanel() {
+  const el = document.getElementById('rq-run-status');
+  if (!el) return;
+  try {
+    const s = await api('/api/blog/rewrite-pipeline/state');
+    updateRqProgressBar(s);
+    updateRqActivityLog(s);
+    if (s.running) {
+      el.textContent = 'Rewriting… ' + (s.processed || 0) + '/' + (s.total || 0) + (s.currentSlug ? ' · ' + s.currentSlug : '');
+      startRewriteQueuePoll();
+    } else {
+      if (s.message === 'completed') el.textContent = 'Last run finished.';
+      else if (s.message === 'stopped') el.textContent = 'Stopped — remaining articles in this batch were skipped.';
+      else if (s.message === 'cleared') el.textContent = 'Staging cleared.';
+      else el.textContent = s.message && s.message !== 'started' ? s.message : 'Idle — configure and start pipeline.';
+    }
+    updateRqControlButtons(s);
+  } catch (e) {
+    el.textContent = '';
+    updateRqProgressBar({ running: false, total: 0, processed: 0 });
+    updateRqActivityLog({ running: false, progressLog: [], stage: 'idle', stageDetail: null });
+    updateRqControlButtons({ running: false });
+  }
+}
+
+function startRewriteQueuePoll() {
+  stopRewriteQueuePoll();
+  const tick = async () => {
+    try {
+      await loadBlogQueue(true);
+      const s = await api('/api/blog/rewrite-pipeline/state');
+      updateRqProgressBar(s);
+      updateRqActivityLog(s);
+      const el = document.getElementById('rq-run-status');
+      if (s.running) {
+        if (el) {
+          el.textContent =
+            'Rewriting… ' + (s.processed || 0) + '/' + (s.total || 0) + (s.currentSlug ? ' · ' + s.currentSlug : '');
+        }
+      } else {
+        if (el) {
+          if (s.message === 'completed') el.textContent = 'Last run finished.';
+          else if (s.message === 'stopped') el.textContent = 'Stopped — remaining articles were skipped.';
+          else if (s.message === 'cleared') el.textContent = 'Staging cleared.';
+          else if (s.message) el.textContent = s.message;
+          else el.textContent = 'Idle';
+        }
+        stopRewriteQueuePoll();
+      }
+      updateRqControlButtons(s);
+    } catch (e) { /* ignore */ }
+  };
+  rewriteQueuePoll = setInterval(tick, 2500);
+  tick();
+}
+
+async function stopRewritePipeline() {
+  const st = document.getElementById('rq-run-status');
+  try {
+    const r = await postWithWriteAuth('/api/blog/rewrite-pipeline/stop', { method: 'POST' });
+    const data = await r.json();
+    if (st) st.textContent = data.message || '';
+    await loadBlogQueue(true);
+    await refreshRewritePipelineControls();
+  } catch (e) {
+    if (st) st.textContent = 'Stop failed: ' + String(e);
+  }
+}
+
+async function clearRewriteStagingAll() {
+  if (
+    !confirm(
+      'Delete all local rewrite staging (index + HTML files under the rewrite folder) and drop legacy rewrite tables in SQLite if they exist?\n\nThis does NOT delete posts or drafts in WordPress.',
+    )
+  ) {
+    return;
+  }
+  const st = document.getElementById('rq-run-status');
+  try {
+    if (st) st.textContent = 'Clearing…';
+    const r = await postWithWriteAuth('/api/blog/rewrite-pipeline/clear', { method: 'POST' });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.ok) {
+      if (st) st.textContent = data.message || data.error || 'Clear failed';
+      await refreshRewritePipelineControls();
+      return;
+    }
+    if (st) st.textContent = data.message || 'Cleared.';
+    closeRewritePreview();
+    stopRewriteQueuePoll();
+    await loadBlogQueue(true);
+    await refreshRewritePipelineControls();
+  } catch (e) {
+    if (st) st.textContent = 'Clear failed: ' + String(e);
+    await refreshRewritePipelineControls();
+  }
+}
+
+async function runRewritePipeline() {
+  const btn = document.getElementById('rq-run-btn');
+  const th = document.getElementById('rq-threshold');
+  const lim = document.getElementById('rq-limit');
+  const dry = document.getElementById('rq-dry-run');
+  const threshold = Math.min(100, Math.max(0, parseInt(String(th && th.value) || '65', 10) || 65));
+  const limit = Math.min(100, Math.max(1, parseInt(String(lim && lim.value) || '5', 10) || 5));
+  if (btn) btn.disabled = true;
+  try {
+    const r = await postWithWriteAuth('/api/blog/rewrite-pipeline/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        threshold,
+        limit,
+        dryRun: !!(dry && dry.checked),
+      }),
+    });
+    const data = await r.json();
+    const stEl = document.getElementById('rq-run-status');
+    if (!r.ok) {
+      if (stEl) stEl.textContent = 'Error: ' + (data.error || r.status);
+      throw new Error(data.error || 'Request failed');
+    }
+    if (!data.started) {
+      if (stEl) stEl.textContent = data.message || 'Not started';
+    } else {
+      if (stEl) stEl.textContent = data.message || 'Started';
+      startRewriteQueuePoll();
+    }
+    await loadBlogQueue(true);
+  } catch (e) {
+    console.error(e);
+  } finally {
+    await refreshRewritePipelineControls();
+  }
+}
+
+async function loadBlogQueue(silent) {
   try {
     const data = await api('/api/blog/rewrite-queue');
     const pending = data.queue || [];
     const done = data.done || [];
     const failed = data.failed || {};
+    const doneItems = data.doneItems || [];
+    const rewrittenItems = data.rewrittenItems || [];
+    const run = data.run;
+
+    const pendingItems = data.pendingItems || [];
+    const failedItems = data.failedItems || [];
+
+    const infoEl = document.getElementById('rq-run-info');
+    if (infoEl) {
+      infoEl.textContent = run
+        ? `${run.status} · threshold ≤${run.threshold} · progress ${run.processed}/${run.total}${run.dryRun ? ' · dry run (upload disabled)' : ''}${run.startedAt ? ' · started ' + run.startedAt.slice(0, 19) : ''}`
+        : 'No rewrite staging yet.';
+    }
 
     document.getElementById('rq-pending-count').textContent = pending.length;
+    const rqReadyCount = document.getElementById('rq-ready-count');
+    if (rqReadyCount) rqReadyCount.textContent = String(rewrittenItems.length);
     document.getElementById('rq-done-count').textContent = done.length;
-    document.getElementById('rq-failed-count').textContent = Object.keys(failed).length;
+    document.getElementById('rq-failed-count').textContent = String(failedItems.length || Object.keys(failed).length);
 
-    // Pending
-    document.getElementById('rq-pending').innerHTML = pending.length
-      ? pending.map(s => `<div class="py-1.5 border-b border-slate-800 last:border-0 text-xs font-mono text-yellow-300">${escHtml(s)}</div>`).join('')
-      : '<p class="text-slate-500 text-sm">Queue is empty.</p>';
+    const processingOnly = pending.filter((s) => !pendingItems.some((p) => p.slug === s));
+    document.getElementById('rq-pending').innerHTML =
+      pendingItems.length || processingOnly.length
+        ? [
+            ...pendingItems.map((it) => {
+              const slug = escHtml(it.slug);
+              return `<div class="py-1.5 border-b border-slate-800 last:border-0 flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs font-mono text-yellow-300 truncate flex-1 min-w-0" title="${slug}">${slug}</span>
+            <button type="button" class="btn btn-sm text-red-400 shrink-0" onclick='removeRewriteQueueItem(${JSON.stringify(String(it.itemId))}, "pending")'>Remove</button>
+          </div>`;
+            }),
+            ...processingOnly.map((s) => {
+              const slug = escHtml(s);
+              return `<div class="py-1.5 border-b border-slate-800 last:border-0 flex flex-wrap items-center gap-2">
+            <span class="text-xs font-mono text-cyan-300 truncate flex-1 min-w-0" title="${slug}">Rewriting… ${slug}</span>
+            <span class="text-xs text-slate-500 shrink-0">in progress</span>
+          </div>`;
+            }),
+          ].join('')
+        : '<p class="text-slate-500 text-sm">Queue is empty.</p>';
 
-    // Done
-    document.getElementById('rq-done').innerHTML = done.length
-      ? done.map(s => `<div class="bg-slate-900 rounded px-2 py-1 text-xs font-mono text-green-400 truncate" title="${escHtml(s)}">${escHtml(s)}</div>`).join('')
-      : '<p class="text-slate-500 text-sm col-span-full">Nothing done yet.</p>';
+    const rqReady = document.getElementById('rq-ready');
+    if (rqReady) {
+      rqReady.innerHTML = rewrittenItems.length
+        ? rewrittenItems.map((it) => {
+            const slug = escHtml(it.slug);
+            const block = it.uploadBlocked;
+            const readBtn = `<button type="button" class="btn btn-sm mr-1 mb-1" onclick='openRewritePreview(${JSON.stringify(String(it.itemId))})'>Read</button>`;
+            const upBtn = block
+              ? '<span class="text-xs text-slate-500">Upload disabled (dry run)</span>'
+              : `<button type="button" class="btn btn-primary btn-sm mb-1" onclick='uploadRewriteToWordpress(${JSON.stringify(String(it.itemId))})'>Upload</button>`;
+            const live = it.sourceUrl ? `<a href="${escAttr(it.sourceUrl)}" target="_blank" rel="noopener" class="text-slate-500 hover:underline text-xs ml-1">live</a>` : '';
+            const delBtn = `<button type="button" class="btn btn-sm text-red-400 mb-1" onclick='removeRewriteQueueItem(${JSON.stringify(String(it.itemId))}, "ready")'>Delete</button>`;
+            return `<div class="py-2 border-b border-slate-800 last:border-0">
+              <div class="font-mono text-xs text-amber-300 truncate" title="${slug}">${slug}${live}</div>
+              <div class="text-xs text-slate-500 mt-1 truncate">${escHtml(it.rewrittenTitle || '')}</div>
+              <div class="mt-2 flex flex-wrap gap-1 items-center">${readBtn}${upBtn}${delBtn}</div>
+            </div>`;
+          }).join('')
+        : '<p class="text-slate-500 text-sm">Nothing waiting for upload.</p>';
+    }
 
-    // Failed
-    const failEntries = Object.entries(failed);
-    document.getElementById('rq-failed').innerHTML = failEntries.length
-      ? failEntries.map(([slug, err]) => `
-          <div class="py-2 border-b border-slate-800 last:border-0">
-            <div class="text-xs font-mono text-red-400">${escHtml(slug)}</div>
-            <div class="text-xs text-slate-500 mt-0.5">${escHtml(String(err).slice(0,100))}</div>
-          </div>`).join('')
+    document.getElementById('rq-done').innerHTML = doneItems.length
+      ? doneItems.map((it) => {
+          const draft = it.draftLink ? `<a href="${escAttr(it.draftLink)}" target="_blank" rel="noopener" class="text-cyan-400 hover:underline">draft</a>` : '';
+          const live = it.sourceUrl ? `<a href="${escAttr(it.sourceUrl)}" target="_blank" rel="noopener" class="text-slate-500 hover:underline ml-1">live</a>` : '';
+          const slug = escHtml(it.slug);
+          const delBtn = `<button type="button" class="btn btn-sm text-red-400" onclick='removeRewriteQueueItem(${JSON.stringify(String(it.itemId))}, "done")'>Delete</button>`;
+          return `<div class="bg-slate-900 rounded px-2 py-2 text-xs text-green-400">
+            <div class="font-mono truncate" title="${slug}">${slug}</div>
+            <div class="mt-1 flex flex-wrap gap-x-2 gap-y-1 items-center">${draft}${live}${delBtn}</div>
+          </div>`;
+        }).join('')
+      : '<p class="text-slate-500 text-sm col-span-full">Nothing on WordPress yet.</p>';
+
+    document.getElementById('rq-failed').innerHTML = failedItems.length
+      ? failedItems.map((it) => {
+          const slug = escHtml(it.slug);
+          return `<div class="py-2 border-b border-slate-800 last:border-0 flex flex-wrap items-start justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-mono text-red-400">${slug}</div>
+              <div class="text-xs text-slate-500 mt-0.5">${escHtml(String(it.error || '').slice(0, 200))}</div>
+            </div>
+            <button type="button" class="btn btn-sm text-red-400 shrink-0" onclick='removeRewriteQueueItem(${JSON.stringify(String(it.itemId))}, "failed")'>Remove</button>
+          </div>`;
+        }).join('')
       : '<p class="text-green-500 text-sm">No failures!</p>';
   } catch(e) {
-    console.error('Blog queue error:', e);
+    if (!silent) console.error('Blog queue error:', e);
   }
+}
+
+async function openRewritePreview(itemId) {
+  try {
+    const d = await api('/api/blog/rewrite-pipeline/item/' + encodeURIComponent(String(itemId)));
+    const tEl = document.getElementById('rq-preview-title');
+    if (tEl) tEl.textContent = d.rewrittenTitle || d.slug;
+    const rEl = document.getElementById('rq-preview-research');
+    if (rEl) rEl.textContent = d.researchNotes || '(none)';
+    const diagEl = document.getElementById('rq-preview-diagnosis');
+    if (diagEl) diagEl.textContent = d.diagnosisJson || '(none)';
+    const ifr = document.getElementById('rq-preview-iframe');
+    if (ifr) ifr.srcdoc = d.rewrittenHtml;
+    document.getElementById('rq-preview-dialog')?.showModal();
+  } catch (e) {
+    console.error(e);
+    const st = document.getElementById('rq-run-status');
+    if (st) st.textContent = 'Preview failed: ' + String(e);
+  }
+}
+
+function closeRewritePreview() {
+  document.getElementById('rq-preview-dialog')?.close();
+}
+
+async function removeRewriteQueueItem(itemId, kind) {
+  const messages = {
+    pending: 'Remove this slug from the pending queue? The pipeline must be idle.',
+    ready: 'Delete this rewritten HTML from the dashboard and disk? Nothing is removed from WordPress.',
+    done: 'Remove this upload record from the dashboard? Your WordPress draft or post is not deleted.',
+    failed: 'Remove this failed entry from the list?',
+  };
+  const msg = messages[kind] || 'Remove this rewrite queue entry?';
+  if (!confirm(msg)) return;
+  const st = document.getElementById('rq-run-status');
+  try {
+    const r = await postWithWriteAuth('/api/blog/rewrite-pipeline/item/' + encodeURIComponent(String(itemId)), { method: 'DELETE' });
+    const data = await r.json().catch(() => ({}));
+    if (!data.ok) {
+      if (st) st.textContent = data.message || data.error || 'Delete failed';
+      return;
+    }
+    if (st) st.textContent = data.message || 'Deleted.';
+    closeRewritePreview();
+    await loadBlogQueue(true);
+  } catch (e) {
+    if (st) st.textContent = 'Delete failed: ' + String(e);
+  }
+}
+
+async function uploadRewriteToWordpress(itemId) {
+  const st = document.getElementById('rq-run-status');
+  try {
+    if (st) st.textContent = 'Uploading…';
+    const r = await postWithWriteAuth('/api/blog/rewrite-pipeline/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: String(itemId) }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      if (st) st.textContent = 'Upload error: ' + (data.error || r.status);
+      return;
+    }
+    if (!data.ok) {
+      if (st) st.textContent = data.message || 'Upload failed';
+      return;
+    }
+    if (st) st.textContent = data.message || 'Uploaded to WordPress.';
+    await loadBlogQueue(true);
+  } catch (e) {
+    if (st) st.textContent = 'Upload failed: ' + String(e);
+  }
+}
+
+function escAttr(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 }
 
 // ============================================================
@@ -3621,8 +4073,18 @@ async function loadBlogTokens() {
   els.forEach(el => { if (el) el.innerHTML = '<span class="text-slate-500 text-sm">Loading…</span>'; });
   try {
     const data = await api('/api/tokens?period=' + period);
-    const { local, anthropic, openai } = data;
-    const t = local.total;
+    const bbanner = document.getElementById('blog-tok-usage-banner');
+    if (bbanner) {
+      if (data.usageError) {
+        bbanner.classList.remove('hidden');
+        bbanner.textContent = data.usageError;
+      } else {
+        bbanner.classList.add('hidden');
+        bbanner.textContent = '';
+      }
+    }
+    const usage = data.usage && !data.usageError ? data.usage : emptyTokenUsage();
+    const t = usage.total;
 
     document.getElementById('blog-tok-total-cost').textContent = fmtCost(t.cost);
     document.getElementById('blog-tok-total-input').textContent = fmtTokens(t.input);
@@ -3630,7 +4092,7 @@ async function loadBlogTokens() {
     document.getElementById('blog-tok-cache-savings').textContent = fmtTokens(t.cacheRead);
 
     // By Model
-    const models = Object.entries(local.byModel).sort((a,b) => b[1].cost - a[1].cost);
+    const models = Object.entries(usage.byModel).sort((a,b) => b[1].cost - a[1].cost);
     const maxCostM = models[0]?.[1]?.cost || 1;
     document.getElementById('blog-tok-by-model').innerHTML = models.length ? models.map(([model, u]) => {
       const pct = Math.round(u.cost / maxCostM * 100);
@@ -3653,7 +4115,7 @@ async function loadBlogTokens() {
     }).join('') : '<p class="text-slate-500 text-sm">No data.</p>';
 
     // By Agent
-    const agents = Object.entries(local.byAgent).sort((a,b) => b[1].cost - a[1].cost);
+    const agents = Object.entries(usage.byAgent).sort((a,b) => b[1].cost - a[1].cost);
     const maxCostA = agents[0]?.[1]?.cost || 1;
     document.getElementById('blog-tok-by-agent').innerHTML = agents.length ? agents.map(([label, u]) => {
       const pct = Math.round(u.cost / maxCostA * 100);
@@ -3662,7 +4124,7 @@ async function loadBlogTokens() {
       return `<div class="mb-3">
         <div class="flex justify-between mb-1">
           <div class="flex items-center gap-1">
-            ${type === 'andy' ? '<span class="badge badge-blue text-xs">andy</span>' : '<span class="badge badge-green text-xs">claude-code</span>'}
+            ${label === 'admin-billing' ? '<span class="badge badge-green text-xs">org API</span>' : type === 'andy' ? '<span class="badge badge-blue text-xs">andy</span>' : type === 'dashboard' ? '<span class="badge badge-gray text-xs">dashboard</span>' : type === 'group' ? '<span class="badge badge-blue text-xs">nano</span>' : '<span class="badge badge-green text-xs">claude-code</span>'}
             <span class="text-xs text-slate-300">${escHtml(name)}</span>
           </div>
           <span class="text-xs font-semibold" style="color:${col}">${fmtCost(u.cost)}</span>
@@ -3680,14 +4142,14 @@ async function loadBlogTokens() {
     }).join('') : '<p class="text-slate-500 text-sm">No data.</p>';
 
     // Daily
-    const days = Object.entries(local.byDay).sort((a,b) => a[0].localeCompare(b[0]));
+    const days = Object.entries(usage.byDay).sort((a,b) => a[0].localeCompare(b[0]));
     if (!days.length) {
       document.getElementById('blog-tok-daily').innerHTML = '<p class="text-slate-500 text-sm">No data.</p>';
     } else {
       const maxDayCost = Math.max(...days.map(([,u]) => u.cost)) || 1;
       document.getElementById('blog-tok-daily').innerHTML = `
         <table><thead><tr>
-          <th>Date</th><th>Input</th><th>Output</th><th>Cache Write</th><th>Cache Read</th><th>Requests</th><th>Est. Cost</th><th style="width:120px"></th>
+          <th>Date</th><th>Input</th><th>Output</th><th>Cache Write</th><th>Cache Read</th><th>Requests</th><th>Cost (API)</th><th style="width:120px"></th>
         </tr></thead>
         <tbody>${days.map(([day, u]) => `
           <tr>
@@ -3708,7 +4170,7 @@ async function loadBlogTokens() {
     }
 
     // Agent × Model
-    const agentModels = Object.entries(local.byAgentModel).sort((a,b) => {
+    const agentModels = Object.entries(usage.byAgentModel).sort((a,b) => {
       const ca = Object.values(a[1]).reduce((s,u) => s + u.cost, 0);
       const cb = Object.values(b[1]).reduce((s,u) => s + u.cost, 0);
       return cb - ca;
@@ -3721,7 +4183,7 @@ async function loadBlogTokens() {
           <tr>
             <td>
               <div class="flex items-center gap-1">
-                ${type === 'andy' ? '<span class="badge badge-blue" style="font-size:10px">andy</span>' : '<span class="badge badge-green" style="font-size:10px">cc</span>'}
+                ${label === 'admin-billing' ? '<span class="badge badge-green" style="font-size:10px">API</span>' : type === 'andy' ? '<span class="badge badge-blue" style="font-size:10px">andy</span>' : type === 'dashboard' ? '<span class="badge badge-gray" style="font-size:10px">dash</span>' : type === 'group' ? '<span class="badge badge-blue" style="font-size:10px">nano</span>' : '<span class="badge badge-green" style="font-size:10px">cc</span>'}
                 <span class="text-xs text-slate-300">${escHtml(name)}</span>
               </div>
             </td>
@@ -3736,6 +4198,7 @@ async function loadBlogTokens() {
       </tbody></table>` : '<p class="text-slate-500 text-sm">No data.</p>';
 
     // Billing panels
+    const { anthropic, openai } = data;
     blogRenderAnthropicBilling(anthropic, data.billingCachedAt);
     blogRenderOpenAIBilling(openai);
 
@@ -3750,10 +4213,15 @@ function blogRenderAnthropicBilling(data, cachedAt) {
   const statusEl = document.getElementById('blog-tok-anthropic-status');
   const el = document.getElementById('blog-tok-anthropic');
   if (!data) {
-    statusEl.textContent = 'fetching…';
-    statusEl.className = 'badge badge-yellow';
-    el.innerHTML = '<p class="text-slate-400 text-sm">⏳ Fetching from Anthropic API in background… refresh in ~20s</p>';
-    setTimeout(() => loadBlogTokens(), 20000);
+    statusEl.textContent = 'optional';
+    statusEl.className = 'badge badge-gray';
+    el.innerHTML = '<p class="text-slate-400 text-sm">Set <span class="font-mono">ANTHROPIC_ADMIN_KEY</span> for organization-wide Anthropic usage/cost. Charts use only Anthropic’s Usage and Cost admin APIs.</p>';
+    return;
+  }
+  if (data._error) {
+    statusEl.textContent = 'error';
+    statusEl.className = 'badge badge-red';
+    el.innerHTML = `<p class="text-red-400 text-sm">${escHtml(data._error)}</p>`;
     return;
   }
   statusEl.textContent = 'connected';

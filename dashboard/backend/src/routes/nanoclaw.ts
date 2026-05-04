@@ -12,7 +12,9 @@ import { collectV2Messages } from '../lib/messages.js';
 import { getV2ReadonlyDb, hasTable } from '../lib/nanoclaw-db.js';
 import { listActiveDockerAgents } from '../lib/docker-agents.js';
 import { listSkillsForGroup } from '../lib/skills.js';
-import { parseLocalUsage } from '../lib/tokens.js';
+import { fetchAnthropicAdminBilling } from '../lib/anthropic-admin-billing.js';
+import { usageTreeFromAnthropicAdmin } from '../lib/anthropic-usage-tree.js';
+import { emptyParsedTokenUsage } from '../lib/tokens.js';
 
 let logTailOffset = 0;
 
@@ -256,8 +258,8 @@ export function createNanoclawRouter(cfg: AppConfig, _seo: Database.Database): H
     return jsonOk(c, { chats });
   });
 
-  r.get('/api/tokens', (c) => {
-    const period = c.req.query('period') ?? 'month';
+  r.get('/api/tokens', async (c) => {
+    const period = (c.req.query('period') ?? 'month') as 'today' | 'week' | 'month';
     const now = new Date();
     let since: string;
     if (period === 'today') {
@@ -271,19 +273,53 @@ export function createNanoclawRouter(cfg: AppConfig, _seo: Database.Database): H
     } else {
       since = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     }
-    const local = parseLocalUsage(cfg, since);
+    const untilIso = now.toISOString();
+    const adminKey = cfg.ANTHROPIC_ADMIN_KEY?.trim();
+    const billingCachedAt = adminKey ? new Date().toISOString() : null;
+
+    if (!adminKey) {
+      return jsonOk(c, {
+        usage: emptyParsedTokenUsage(),
+        usageError:
+          'Set ANTHROPIC_ADMIN_KEY (sk-ant-admin…) so this page can load organization usage and cost from Anthropic.',
+        usageSource: 'anthropic_admin_api' as const,
+        anthropic: null,
+        openai: null,
+        period,
+        since,
+        billingCachedAt,
+      });
+    }
+
+    const anthropic = await fetchAnthropicAdminBilling(adminKey, { sinceIso: since, untilIso, period });
+    if ('_error' in anthropic) {
+      return jsonOk(c, {
+        usage: emptyParsedTokenUsage(),
+        usageError: anthropic._error,
+        usageSource: 'anthropic_admin_api' as const,
+        anthropic,
+        openai: null,
+        period,
+        since,
+        billingCachedAt,
+      });
+    }
+
+    const usage = usageTreeFromAnthropicAdmin(anthropic);
+
     return jsonOk(c, {
-      local,
-      anthropic: null,
+      usage,
+      usageSource: 'anthropic_admin_api' as const,
+      anthropic,
       openai: null,
       period,
       since,
-      billingCachedAt: null,
+      billingCachedAt,
     });
   });
 
   r.get('/api/quota', async (c) => {
-    /** Token/cost on this page comes from local logs + billing (`/api/tokens`). Provider “quota %” is not wired for most vendors (no public limit endpoint or extra OAuth). */
+    /** Token/cost charts use Anthropic Admin API (`/api/tokens`) when configured. Provider “quota %” is not wired for most vendors (no public limit endpoint or extra OAuth). */
     const notConfigured = { error: 'not_configured' as const };
     const claude = cfg.ANTHROPIC_API_KEY?.trim()
       ? {

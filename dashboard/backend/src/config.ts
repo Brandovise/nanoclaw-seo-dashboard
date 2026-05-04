@@ -20,15 +20,31 @@ const schema = z.object({
   DASHBOARD_WRITE_TOKEN: z.string().optional(),
   /** Blog queue, content dir, etc.; default `dashboard/data/blog`. SEO audit rows are in DASHBOARD_SQLITE_PATH (`seo_audits`), not JSON. */
   DASHBOARD_BLOG_DATA_DIR: z.string().optional(),
+  /** Directory for rewritten HTML files (`{runId}/{itemId}.html`). Default: `rewrite-html` next to the dashboard SQLite file. */
+  DASHBOARD_REWRITE_FILES_DIR: z.string().optional(),
   MAX_CONCURRENT_CONTAINERS: z.coerce.number().default(5),
   NANOCLAW_SRC_DIR: z.string().optional(),
   WP_SITE_URL: z.string().optional(),
   WP_USERNAME: z.string().optional(),
   WP_APP_PASSWORD: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  /** Organization Admin API key (`sk-ant-admin…`) — required for live usage/cost in `/api/tokens` (Usage and Cost API). Same org as `ANTHROPIC_API_KEY`; covers all usage (NanoClaw + dashboard). */
+  ANTHROPIC_ADMIN_KEY: z.string().optional(),
   SEO_AUDIT_MODEL: z.string().optional(),
   SEO_AUDIT_MAX_CONTENT_CHARS: z.coerce.number().optional(),
   SEO_AUDIT_PAUSE_MS: z.coerce.number().optional(),
+  /** Anthropic server tool type for rewrite-pipeline research. Default web_search_20250305; web_search_20260209 needs a supported model (see Anthropic docs). */
+  REWRITE_WEB_SEARCH_TOOL: z.enum(['web_search_20250305', 'web_search_20260209']).optional(),
+  /** Max web searches per article for web_search_20250305 (ignored for web_search_20260209). */
+  REWRITE_WEB_SEARCH_MAX_USES: z.coerce.number().default(5),
+  REWRITE_SEO_THRESHOLD: z.coerce.number().default(65),
+  /** If set, articles with geo_score below this are also candidates (combined with SEO rule via OR). */
+  REWRITE_GEO_THRESHOLD: z.coerce.number().optional(),
+  REWRITE_PAUSE_MS: z.coerce.number().default(2000),
+  REWRITE_MAX_HTML_CHARS: z.coerce.number().default(200_000),
+  /** Max writer ↔ reviewer passes per article. Default 6. */
+  REWRITE_MAX_REVIEW_ROUNDS: z.coerce.number().default(6),
+  REWRITE_MODEL: z.string().optional(),
 });
 
 export type AppConfig = z.infer<typeof schema> & {
@@ -38,6 +54,8 @@ export type AppConfig = z.infer<typeof schema> & {
   resolvedGroupsDir: string;
   resolvedSrcDir: string;
   resolvedBlogDataDir: string;
+  /** Root directory for `content_rewrite_run_items` HTML snapshots ({runId}/{itemId}.html). */
+  resolvedRewriteFilesDir: string;
   backendRoot: string;
   /** Monorepo root (parent of `dashboard/`) */
   repoRoot: string;
@@ -96,11 +114,15 @@ export function loadConfig(): AppConfig {
   const backendRoot = path.resolve(__dirname, '..');
   const sqlitePath = resolveFromRepo(raw.DASHBOARD_SQLITE_PATH);
   const blogDataDir = resolveFromRepo(raw.DASHBOARD_BLOG_DATA_DIR || 'dashboard/data/blog');
+  const rewriteFilesDir = raw.DASHBOARD_REWRITE_FILES_DIR
+    ? resolveFromRepo(raw.DASHBOARD_REWRITE_FILES_DIR)
+    : path.join(path.dirname(sqlitePath), 'rewrite-html');
 
   _config = {
     ...raw,
     DASHBOARD_SQLITE_PATH: sqlitePath,
     resolvedBlogDataDir: blogDataDir,
+    resolvedRewriteFilesDir: rewriteFilesDir,
     v2DbPath,
     v2SessionsDir,
     resolvedLogPath,
