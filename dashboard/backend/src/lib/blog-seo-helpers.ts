@@ -4,6 +4,8 @@ import Database from 'better-sqlite3';
 import type { AppConfig } from '../config.js';
 import { fileMtimeSafe, readJsonSafe } from './fs-utils.js';
 import { getLatestSeoAuditAt, readSeoAuditRecords } from './seo-audit.js';
+import { sqlWpTypesDashboardClause } from './wp-dashboard-types.js';
+import { readStagingIndex } from './content-rewrite-files.js';
 
 export function blogPaths(cfg: AppConfig) {
   const base = cfg.resolvedBlogDataDir;
@@ -30,6 +32,7 @@ export function buildAuditFallbackFromWordPress(cfg: AppConfig): Array<Record<st
         .prepare(
           `SELECT slug, title, last_synced_at as audited_at
          FROM wp_articles
+         WHERE ${sqlWpTypesDashboardClause()}
          ORDER BY modified_at DESC
          LIMIT 5000`,
         )
@@ -119,7 +122,9 @@ export function getBlogStatsResponse(cfg: AppConfig) {
             .prepare(`SELECT 1 as x FROM sqlite_master WHERE type='table' AND name='wp_articles'`)
             .get() as { x: number } | undefined;
           if (has) {
-            const slugs = wpN.prepare('SELECT slug FROM wp_articles').all() as Array<{ slug: string }>;
+            const slugs = wpN
+              .prepare(`SELECT slug FROM wp_articles WHERE ${sqlWpTypesDashboardClause()}`)
+              .all() as Array<{ slug: string }>;
             for (const { slug } of slugs) onDiskSlugs.add(slug);
             totalOnDisk = slugs.length;
           }
@@ -135,6 +140,8 @@ export function getBlogStatsResponse(cfg: AppConfig) {
   let rewriteDone = 0;
   let rewritePending = 0;
   let rewriteFailed = 0;
+  let rewriteReady = 0;
+  let rewriteUploaded = 0;
   let firstRewriteDate: string | null = null;
   let lastRewriteDate: string | null = null;
   if (schedulerQueue) {
@@ -154,6 +161,55 @@ export function getBlogStatsResponse(cfg: AppConfig) {
     }
   } else {
     rewritePending = totalOnDisk;
+  }
+
+  // New pipeline source of truth: rewrite staging index (filesystem, not legacy queue JSON).
+  // If present, prefer these counts so overview cards match the rewrite/upload UI.
+  const staging = readStagingIndex(cfg);
+  if (staging.length > 0) {
+    rewriteReady = staging.filter((x) => x.status === 'rewritten').length;
+    rewriteUploaded = staging.filter((x) => x.status === 'done').length;
+    rewriteFailed = staging.filter((x) => x.status === 'failed').length;
+    rewriteDone = rewriteUploaded;
+    rewritePending = rewriteReady;
+    for (const it of staging) {
+      const at = (it.finished_at || it.rewritten_at || '').trim();
+      if (!at) continue;
+      if (!firstRewriteDate || at < firstRewriteDate) firstRewriteDate = at;
+      if (!lastRewriteDate || at > lastRewriteDate) lastRewriteDate = at;
+    }
+  }
+
+  let interlinkProcessedCount = 0;
+  try {
+    if (fs.existsSync(cfg.DASHBOARD_SQLITE_PATH)) {
+      const db = new Database(cfg.DASHBOARD_SQLITE_PATH, { readonly: true, fileMustExist: true });
+      try {
+        const has = db
+          .prepare(`SELECT 1 as x FROM sqlite_master WHERE type='table' AND name='interlinking_state'`)
+          .get() as { x: number } | undefined;
+        if (has) {
+          const row = db
+            .prepare('SELECT suggestions_json FROM interlinking_state WHERE id = 1')
+            .get() as { suggestions_json: string | null } | undefined;
+          if (row?.suggestions_json?.trim()) {
+            const o = JSON.parse(row.suggestions_json) as Record<
+              string,
+              { inbound?: unknown[]; outbound?: unknown[] }
+            >;
+            interlinkProcessedCount = Object.values(o || {}).filter((v) => {
+              const ins = Array.isArray(v?.inbound) ? v.inbound.length : 0;
+              const outs = Array.isArray(v?.outbound) ? v.outbound.length : 0;
+              return ins + outs > 0;
+            }).length;
+          }
+        }
+      } finally {
+        db.close();
+      }
+    }
+  } catch {
+    /* interlinking table may be absent on older resets */
   }
 
   const auditCount = audit.length;
@@ -188,6 +244,8 @@ export function getBlogStatsResponse(cfg: AppConfig) {
     rewriteTotal: totalOnDisk,
     rewritePending,
     rewriteFailed,
+    rewriteReady,
+    rewriteUploaded,
     auditCount,
     seoScoredCount: seoScored.length,
     geoScoredCount: geoScored.length,
@@ -200,6 +258,7 @@ export function getBlogStatsResponse(cfg: AppConfig) {
     firstRewriteDate,
     lastRewriteDate,
     schedulerQueueLen: rewritePending,
+    interlinkProcessedCount,
     eta: {
       daysRemaining,
       estimatedDate: etaDate,

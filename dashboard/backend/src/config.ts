@@ -26,6 +26,8 @@ const schema = z.object({
   NANOCLAW_SRC_DIR: z.string().optional(),
   WP_SITE_URL: z.string().optional(),
   WP_USERNAME: z.string().optional(),
+  /** Alias for `WP_USERNAME` (login name, not email). */
+  WP_USER: z.string().optional(),
   WP_APP_PASSWORD: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   /** Organization Admin API key (`sk-ant-admin…`) — required for live usage/cost in `/api/tokens` (Usage and Cost API). Same org as `ANTHROPIC_API_KEY`; covers all usage (NanoClaw + dashboard). */

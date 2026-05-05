@@ -812,7 +812,11 @@
     <div class="card mb-4 overflow-x-auto">
       <div class="flex flex-wrap gap-2 items-center mb-3">
         <input id="wps-search" type="text" placeholder="Search slug/title…" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 w-64 focus:outline-none focus:border-indigo-500">
-        <input id="wps-type" type="text" placeholder="Type (post/page…)" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 w-44 focus:outline-none focus:border-indigo-500">
+        <select id="wps-type" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 w-44 focus:outline-none focus:border-indigo-500" title="WordPress dashboard only indexes post + page">
+          <option value="">All (post &amp; page)</option>
+          <option value="post">post</option>
+          <option value="page">page</option>
+        </select>
         <input id="wps-status-filter" type="text" placeholder="Status (publish/draft…)" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 w-52 focus:outline-none focus:border-indigo-500">
         <input id="wps-category" type="text" placeholder="Category keyword" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 w-48 focus:outline-none focus:border-indigo-500">
         <button class="btn btn-sm btn-primary" onclick="loadWpArticles(1)">Apply</button>
@@ -930,6 +934,7 @@
           <option value="no-inbound">No Inbound</option>
           <option value="weak">Weak Inbound</option>
           <option value="all">All Problem Pages</option>
+          <option value="saved">Saved suggestions only (any link health)</option>
         </select>
       </label>
       <label class="text-xs text-slate-500 flex items-center gap-2">WP type
@@ -963,7 +968,7 @@
       <div class="card"><div class="stat-value text-amber-400" id="il-no-inbound">—</div><div class="stat-label">No Inbound</div></div>
       <div class="card"><div class="stat-value text-yellow-400" id="il-weak">—</div><div class="stat-label">Weak (1 link)</div></div>
     </div>
-    <p class="text-xs text-slate-600 mb-4 max-w-3xl">Numbers above count <strong class="text-slate-400">every</strong> matching page in the graph. The list below shows only pages that already have <strong class="text-slate-400">saved</strong> Claude suggestions (processed).</p>
+    <p class="text-xs text-slate-600 mb-4 max-w-3xl">Numbers above count <strong class="text-slate-400">every</strong> matching page in the graph. The list below defaults to <strong class="text-slate-400">problem</strong> buckets; pick <strong class="text-slate-400">Saved suggestions only</strong> to see every slug with stored Claude output (including hints from <strong class="text-slate-400">content rewrite</strong> on healthy pages).</p>
 
     <div id="il-progress-summary" class="card mb-6 p-4 border-slate-800">
       <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Processed vs addressed</div>
@@ -1184,8 +1189,26 @@ async function loadBlog() {
     }
 
     // Headline stat cards
-    document.getElementById('blog-rewrite-progress').textContent = `${done}`;
-    document.getElementById('blog-pending-count').textContent = `${stats.rewritePending}`;
+    const rewriteProgressEl = document.getElementById('blog-rewrite-progress');
+    const pendingEl = document.getElementById('blog-pending-count');
+    rewriteProgressEl.textContent = `${done}`;
+    pendingEl.textContent = `${stats.rewritePending}`;
+    // Keep overview in sync with staging model: uploaded(done) + ready(awaiting upload) + failed.
+    const doneCard = rewriteProgressEl.parentElement;
+    const doneNoteOld = doneCard.querySelector('.stat-subnote');
+    if (doneNoteOld) doneNoteOld.remove();
+    const doneNote = document.createElement('div');
+    doneNote.className = 'text-xs text-slate-500 mt-1 stat-subnote';
+    doneNote.textContent = `Uploaded ${stats.rewriteUploaded ?? done} · Ready ${stats.rewriteReady ?? stats.rewritePending}`;
+    doneCard.appendChild(doneNote);
+
+    const pendingCard = pendingEl.parentElement;
+    const pendingNoteOld = pendingCard.querySelector('.stat-subnote');
+    if (pendingNoteOld) pendingNoteOld.remove();
+    const pendingNote = document.createElement('div');
+    pendingNote.className = 'text-xs text-slate-500 mt-1 stat-subnote';
+    pendingNote.textContent = `Interlink suggestions saved: ${stats.interlinkProcessedCount ?? 0}`;
+    pendingCard.appendChild(pendingNote);
     // Show ETA under the Remaining card
     const remainingCard = document.getElementById('blog-pending-count').parentElement;
     const etaNote = remainingCard.querySelector('.eta-note');
@@ -3716,7 +3739,7 @@ async function loadInterlinking() {
   ilSetProgressCounts(null, null, null);
   try {
     ilData = await api('/api/blog/interlinking');
-    const { orphans, noInbound, weakInbound, suggestions, lastRun, processedCount, siteUrl } = ilData;
+    const { orphans, noInbound, weakInbound, suggestions, lastRun, processedCount, siteUrl, fullGraphNodes } = ilData;
 
     document.getElementById('il-orphans').textContent = String(orphans.length);
     document.getElementById('il-no-inbound').textContent = String(noInbound.length);
@@ -3760,19 +3783,72 @@ function ilHasProcessedSuggestions(suggestions, id) {
   return ins + outs > 0;
 }
 
+function ilLinkHealthTag(n) {
+  const inn = Number(n.inbound);
+  const out = Number(n.outbound);
+  if (!Number.isFinite(inn) || !Number.isFinite(out)) {
+    return { label: 'Rewrite / saved', tagColor: '#312e81', tagText: '#c7d2fe' };
+  }
+  if (inn === 0 && out === 0) return { label: 'Orphan', tagColor: '#450a0a', tagText: '#f87171' };
+  if (inn === 0) return { label: 'No Inbound', tagColor: '#451a03', tagText: '#fb923c' };
+  if (inn < 2) return { label: 'Weak', tagColor: '#1c1917', tagText: '#a8a29e' };
+  return { label: 'OK', tagColor: '#1e293b', tagText: '#94a3b8' };
+}
+
 function ilApplyFilter() {
   if (!ilData) return;
-  const { orphans, noInbound, weakInbound, suggestions } = ilData;
+  const { orphans, noInbound, weakInbound, suggestions, fullGraphNodes } = ilData;
+  const graphMap = new Map((fullGraphNodes || []).map((n) => [n.id, n]));
   const filter = document.getElementById('il-filter').value;
-  const search = document.getElementById('il-search').value.toLowerCase();
+  const ilSearchEl = document.getElementById('il-search');
+  const search = ilSearchEl && ilSearchEl.value ? ilSearchEl.value.toLowerCase() : '';
 
-  let bucket = [];
-  if (filter === 'orphans') bucket = orphans;
-  else if (filter === 'no-inbound') bucket = noInbound;
-  else if (filter === 'weak') bucket = weakInbound;
-  else bucket = [...new Map([...orphans, ...noInbound, ...weakInbound].map(n => [n.id, n])).values()];
+  function syntheticNode(slug) {
+    const st = ilData.slugTypes && ilData.slugTypes[slug];
+    return {
+      id: slug,
+      title: slug.replace(/-/g, ' '),
+      category: '—',
+      inbound: NaN,
+      outbound: NaN,
+      wpTypes: st?.wpTypes || ['post'],
+      wpTypeLabel: st?.wpTypeLabel || 'Post',
+    };
+  }
 
-  let nodes = bucket.filter((n) => ilHasProcessedSuggestions(suggestions, n.id));
+  let bucketHint = [];
+  if (filter === 'orphans') bucketHint = orphans;
+  else if (filter === 'no-inbound') bucketHint = noInbound;
+  else if (filter === 'weak') bucketHint = weakInbound;
+  else if (filter !== 'saved') bucketHint = [...new Map([...orphans, ...noInbound, ...weakInbound].map((n) => [n.id, n])).values()];
+
+  let nodes = [];
+  if (filter === 'saved') {
+    for (const k of Object.keys(suggestions || {})) {
+      if (!ilHasProcessedSuggestions(suggestions, k)) continue;
+      const gn = graphMap.get(k);
+      nodes.push(gn || syntheticNode(k));
+    }
+  } else {
+    let bucket = [];
+    if (filter === 'orphans') bucket = orphans;
+    else if (filter === 'no-inbound') bucket = noInbound;
+    else if (filter === 'weak') bucket = weakInbound;
+    else bucket = [...new Map([...orphans, ...noInbound, ...weakInbound].map((n) => [n.id, n])).values()];
+
+    nodes = bucket.filter((n) => ilHasProcessedSuggestions(suggestions, n.id));
+
+    if (filter === 'all') {
+      const seen = new Set(nodes.map((n) => n.id));
+      for (const k of Object.keys(suggestions || {})) {
+        if (!ilHasProcessedSuggestions(suggestions, k) || seen.has(k)) continue;
+        const gn = graphMap.get(k);
+        nodes.push(gn || syntheticNode(k));
+        seen.add(k);
+      }
+    }
+  }
+
   const typeF = document.getElementById('il-wp-type-filter') && document.getElementById('il-wp-type-filter').value;
   if (typeF && typeF !== 'all') {
     nodes = nodes.filter((n) => ilNodeWpTypes(n).includes(typeF));
@@ -3783,31 +3859,42 @@ function ilApplyFilter() {
     );
   }
 
+  nodes.sort((a, b) => {
+    const tier = (x) => {
+      const i = Number(x.inbound);
+      const o = Number(x.outbound);
+      if (!Number.isFinite(i) || !Number.isFinite(o)) return 99;
+      if (i === 0 && o === 0) return 0;
+      if (i === 0) return 1;
+      if (i < 2) return 2;
+      return 3;
+    };
+    const d = tier(a) - tier(b);
+    return d !== 0 ? d : String(a.id).localeCompare(String(b.id));
+  });
+
   const el = document.getElementById('il-list');
   if (!nodes.length) {
-    const anyProcessed = Object.keys(suggestions).some((k) => ilHasProcessedSuggestions(suggestions, k));
+    const anyProcessed = Object.keys(suggestions || {}).some((k) => ilHasProcessedSuggestions(suggestions, k));
     if (!anyProcessed) {
       el.innerHTML =
-        '<p class="text-slate-500">No <em>processed</em> pages yet. Use <strong>Generate suggestions (Claude)</strong> or the Python script, then <strong>Refresh</strong>. Totals above still show the full graph.</p>';
+        '<p class="text-slate-500">No <em>processed</em> pages yet. Use <strong>Generate suggestions (Claude)</strong>, run <strong>content rewrite</strong> (writes hints per slug when missing), or the Python script, then <strong>Refresh</strong>. Pick <strong>Saved suggestions only</strong> once data exists.</p>';
     } else if (search) {
       el.innerHTML = '<p class="text-slate-500">No processed pages match this search.</p>';
-    } else if (bucket.length === 0) {
+    } else if (filter !== 'saved' && filter !== 'all' && bucketHint.length === 0) {
       el.innerHTML = '<p class="text-slate-500">No pages in this category in the graph.</p>';
     } else {
       el.innerHTML =
-        '<p class="text-slate-500">No <em>processed</em> pages in this category yet. Unprocessed pages are included in the totals above.</p>';
+        '<p class="text-slate-500">No processed pages match this filter. Try <strong>Saved suggestions only</strong> or <strong>All Problem Pages</strong> to include rewrite-backed slugs outside one bucket.</p>';
     }
     return;
   }
 
-  el.innerHTML = nodes.map(n => {
+  el.innerHTML = nodes.map((n) => {
     const sug = suggestions[n.id] || {};
     const inboundSug = sug.inbound || [];
     const outboundSug = sug.outbound || [];
-    const isOrphan = n.inbound === 0 && n.outbound === 0;
-    const tagColor = isOrphan ? '#450a0a' : n.inbound === 0 ? '#451a03' : '#1c1917';
-    const tagText  = isOrphan ? '#f87171' : n.inbound === 0 ? '#fb923c' : '#a8a29e';
-    const tagLabel = isOrphan ? 'Orphan' : n.inbound === 0 ? 'No Inbound' : 'Weak';
+    const { tagColor, tagText, tagLabel } = ilLinkHealthTag(n);
 
     let sugHtml = `<div class="mt-2 space-y-1">`;
     for (const s of inboundSug) {
@@ -3824,6 +3911,11 @@ function ilApplyFilter() {
       ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">${escHtml(n.wpTypeLabel)}</span>`
       : ilTypeBadgeForSlug(n.id);
 
+    const degStr =
+      Number.isFinite(Number(n.inbound)) && Number.isFinite(Number(n.outbound))
+        ? `↓${n.inbound} ↑${n.outbound}`
+        : '';
+
     return `<div class="card mb-3">
       <div class="flex items-start gap-3">
         <span class="badge shrink-0" style="background:${tagColor};color:${tagText}">${tagLabel}</span>
@@ -3831,7 +3923,7 @@ function ilApplyFilter() {
           <div class="flex items-center gap-2 flex-wrap">
             <span class="inline-flex items-center gap-1">${ilSlugLink(n.id)}${typeBadgeHtml}</span>
             <span class="text-xs text-slate-500">${escHtml(String(n.category || 'uncategorized').replace(/-/g,' '))}</span>
-            <span class="text-xs text-slate-600">↓${n.inbound} ↑${n.outbound}</span>
+            ${degStr ? `<span class="text-xs text-slate-600">${degStr}</span>` : ''}
           </div>
           <div class="text-xs text-slate-500 mt-0.5 truncate">${escHtml(n.title)}</div>
           ${sugHtml}
@@ -4419,7 +4511,7 @@ async function rebuildGraphFromLinkPage() {
 async function loadWpArticles(page = wpsPage) {
   wpsPage = Math.max(1, Number(page) || 1);
   const q = document.getElementById('wps-search').value.trim();
-  const type = document.getElementById('wps-type').value.trim();
+  const type = document.getElementById('wps-type').value;
   const status = document.getElementById('wps-status-filter').value.trim();
   const category = document.getElementById('wps-category').value.trim();
   const offset = (wpsPage - 1) * WPS_PAGE_SIZE;

@@ -135,8 +135,19 @@ export type OrchestratorRoundTrace = {
 export type OrchestratorTrace = {
   review_rounds: number;
   final_approved: boolean;
+  /** True when the last round met score gates but the model did not set approve (orchestrator promoted). */
+  soft_approved?: boolean;
   rounds: OrchestratorRoundTrace[];
 };
+
+function shouldSoftApproveOnFinalRound(r: ReviewerResult): boolean {
+  return (
+    r.factual_risk.level !== 'high' &&
+    r.human_readable.score >= 4 &&
+    r.seo.score >= 3 &&
+    r.vs_original.improved
+  );
+}
 
 export type RevisionNote = {
   round: number;
@@ -171,15 +182,29 @@ ${serializeEditorialState(state)}
 
 async function runDiagnosisAgent(
   cfg: AppConfig,
-  input: { title: string; slug: string; summary: string; failNotes: string; researchNotes: string },
+  input: {
+    title: string;
+    slug: string;
+    summary: string;
+    failNotes: string;
+    researchNotes: string;
+    /** Claude/graph interlink cues — informs rewrite_focus (e.g. internal_links audit). */
+    interlinkHints?: string;
+  },
 ): Promise<string> {
   const system = `You are the planning / diagnosis agent between research and writing.
 Respond with a single JSON object only, no markdown fences inside (raw JSON).
 Schema: { "bullets": string[], "rewrite_focus": string[] }
 - bullets: 4–8 concise reasons the page underperforms (SEO audit + research themes).
 - rewrite_focus: 3–6 priorities for the writer; do NOT copy long verbatim research facts into this JSON—summarize themes only (e.g. "refresh statutory context" not exact euro figures).
+- When interlink hints are provided, mention weaving specific internal outbound links naturally if internal linking / crawl depth showed up as weak.
 
 ${PUBLICATION_BACKGROUND_FOR_PROMPTS}`;
+
+  const hil =
+    typeof input.interlinkHints === 'string' && input.interlinkHints.trim().length > 0
+      ? input.interlinkHints.trim().slice(0, 8000)
+      : '(none)';
 
   const user = `Title: ${input.title}
 Slug: ${input.slug}
@@ -188,7 +213,10 @@ Failing checks:
 ${input.failNotes || '(none)'}
 
 Internal research themes (may be imperfect—writer must not invent specifics):
-${input.researchNotes || '(none)'}`;
+${input.researchNotes || '(none)'}
+
+Interlink context (URLs/slugs/anchors—the writer will see full detail again in EDITORIAL_STATE; prioritize in rewrite_focus):
+${hil}`;
 
   const text = await callClaudeText(cfg, system, user, 2500);
   const jsonStr = stripJsonFence(text);
@@ -250,7 +278,8 @@ ${PUBLICATION_BACKGROUND_FOR_PROMPTS}
 ## SEO / GEO (align with dashboard SEO audit)
 - Strong heading ladder (# / ## / ###), answer-first where natural, solid E-E-A-T.
 - Address diagnosis / failing audit themes—without robotic keyword stuffing.
-- Integrate interlink hints only where they help the reader (Markdown links).
+- **Internal links**: If **interlink_hints** lists URLs slugs or Markdown link lines, weave in **at least 4** contextual \`[anchor](absolute-url)\` links to relevant related pages—not a footer blob; scatter in body sections where they aid navigation. Omit a suggested URL only if it is genuinely off-topic.
+- If hints are sparse, infer 2–4 internal links using the same site's path style as in **SOURCE HTML** (match domain + slug paths from existing anchors in source).
 
 ## Hard rules (anti-hallucination)
 - Do **not** add **new** concrete numbers (€, precise claim limits, case numbers) unless they are already in the **source HTML**.
@@ -298,7 +327,8 @@ function buildFormatterSystemPrompt(_cfg: AppConfig): string {
 ${PUBLICATION_BACKGROUND_FOR_PROMPTS}
 
 Rules:
-- Preserve **as much as practical** of the original HTML scaffolding: \`<!-- wp:...\` block comments, shortcodes, classes, and outer wrappers.
+- Preserve **as much as practical** of the original HTML scaffolding: \`<!-- wp:...\` block comments, shortcodes, classes, and inline structure from the source so the site theme still applies after paste.
+- If the original is clearly **Elementor front-end markup** (e.g. \`data-elementor-type\`, \`elementor-widget-*\` classes), do **not** paste the whole page scaffold into one block: output a normal **article body** fragment (headings, paragraphs, lists, links, semantic sections) only—no duplicate outer Elementor layout wrappers.
 - Replace inner paragraph/heading/list **content** so it reflects the approved Markdown (semantic mapping). If Markdown reorders sections, you may reorder the corresponding blocks.
 - Do **not** invent new factual claims, numbers, or legal specifics—only what follows from the Markdown.
 - Do **not** paste internal research, reviewer critique, or revision_notes into the page.
@@ -358,9 +388,10 @@ Respond with **one JSON object only** (no markdown), schema:
 }
 
 Rules:
-- **seo.score** (1–5) and **seo.notes**: **Anchor explicitly to the dashboard audit.** Use **checks_json** (and failing check notes)—would the same failure types likely still FAIL after this revision (e.g. weak headings/H1 logic implied by checks, thin intro, keyword/intent mismatch, meta-related signals reflected in checks)? Cite which themes improved or are still weak. This is **not** a new automated audit; it is your holistic judgment **informed by** those checkpoints.
+- **seo.score** (1–5) and **seo.notes**: Use **checks_json** plus the visible candidate. Score **body-level** improvements (headings, internal links inside the Markdown/HTML body, readability, snippets). **Do not** treat Yoast/meta description, the HTML title element, canonical URLs, or JSON-LD/schema fields as reasons to score ≤2—they are applied outside this Markdown step; say "defer to WP/SEO plugin" in notes instead of blocking.
 - **human_readable**: clarity, scannability, tone, undue repetition—not keyword stuffing; align with independent-advisor / transparency positioning where appropriate (see publication context above).
-- **approve: true** only if factual_risk is **low**, both human_readable and seo scores are **>= 4** (scale 1–5), and vs_original.improved is true or tied to a minor regression you still accept.
+- **approve: true** when **all** of: vs_original.improved is true (or negligible regression); human_readable.score **≥ 4**; seo.score **≥ 3**; factual_risk is **not** **high**. **Medium** factual_risk can still approve if **problem_claims** are hedged wording or citations that roughly match original/research—not invented law/coverage guarantees.
+- **approve: false** when factual_risk is **high**, human_readable ≤3, seo ≤2 due to fixable-in-body gaps (e.g. no internal links despite strong hints URLs in state), or the draft clearly regresses vs original.
 - **problem_claims**: quoted short phrases from the **revised candidate** (${candidateIsMarkdown ? 'Markdown' : 'HTML'}) that look like new concrete facts (amounts, dates, case numbers, coverage sums) **not** clearly supported by the **original HTML**—flag them.
 - **must_fix**: imperative items for the writer; empty if approve.
 - **writer_brief**: short paragraph of guidance for the next draft; empty if approve.
@@ -510,6 +541,7 @@ export async function runOrchestratedArticleRewrite(
     summary: params.auditSummary,
     failNotes: params.failNotes,
     researchNotes,
+    interlinkHints: params.interlinkHints,
   });
   emitProgress(onP, 'diagnosis', 'Planning agent: done');
   state.diagnosis_json = diagnosisJson;
@@ -559,11 +591,23 @@ export async function runOrchestratedArticleRewrite(
       .filter(Boolean)
       .join(' · ');
 
+    const softPass =
+      !reviewer.approve && r === maxReviews && shouldSoftApproveOnFinalRound(reviewer);
+    if (softPass) {
+      log.info({ slug: params.slug, reviewRound: r }, 'rewrite: final-round soft-approve (scores OK, model held approve)');
+    }
+
     if (reviewer.approve) {
       emitProgress(
         onP,
         'reviewer',
         `Reviewer: Markdown approved — HR ${hr}/5, SEO ${seo}/5, risk ${risk}${noteTail ? ` — ${noteTail}` : ''}`,
+      );
+    } else if (softPass) {
+      emitProgress(
+        onP,
+        'reviewer',
+        `Reviewer: accepted on last round (soft) — HR ${hr}/5, SEO ${seo}/5, risk ${risk}${noteTail ? ` — ${noteTail}` : ''}`,
       );
     } else if (revised) {
       emitProgress(
@@ -584,7 +628,7 @@ export async function runOrchestratedArticleRewrite(
         slug: params.slug,
         reviewRound: r,
         candidateFormat: 'markdown',
-        approve: reviewer.approve,
+        approve: reviewer.approve || softPass,
         factualRisk: reviewer.factual_risk?.level,
         hrScore: reviewer.human_readable?.score,
         seoScore: reviewer.seo?.score,
@@ -594,8 +638,9 @@ export async function runOrchestratedArticleRewrite(
       'reviewer agent',
     );
 
-    if (reviewer.approve) {
+    if (reviewer.approve || softPass) {
       trace.final_approved = true;
+      trace.soft_approved = softPass;
       break;
     }
 
@@ -627,6 +672,12 @@ export async function runOrchestratedArticleRewrite(
       'Crew: using last Markdown → HTML — reviewer did not fully approve MD (human QA recommended)',
     );
     log.warn({ slug: params.slug, rounds: trace.rounds.length }, 'rewrite finished without reviewer approval—using last draft');
+  } else if (trace.soft_approved) {
+    emitProgress(
+      onP,
+      'reviewer',
+      'Crew: final draft passed score gates (meta/schema may still be CMS-side)',
+    );
   }
 
   emitProgress(onP, 'formatter', 'Formatter: Markdown → WordPress HTML (structured state + final draft)…');

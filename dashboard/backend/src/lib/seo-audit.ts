@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import { log } from './logger.js';
+import { sqlWpTypesDashboardClause } from './wp-dashboard-types.js';
 import { hasTable } from './nanoclaw-db.js';
 
 /** 22 checks — must match what the blog UI and top-issues expect. */
@@ -229,14 +230,16 @@ function getWpRows(cfg: AppConfig, slugs: string[] | null, limit: number): WpRow
       const ph = slugs.map(() => '?').join(',');
       return db
         .prepare(
-          `SELECT slug, title, content_text, content_html FROM wp_articles WHERE slug IN (${ph}) LIMIT ${limit}`,
+          `SELECT slug, title, content_text, content_html FROM wp_articles WHERE ${sqlWpTypesDashboardClause()} AND slug IN (${ph}) LIMIT ${limit}`,
         )
         .all(...slugs) as WpRow[];
     }
 
     const bySlug = new Map(readSeoAuditRecords(cfg).map((r) => [r.slug, r] as [string, SeoAuditRecord]));
     const order = db
-      .prepare(`SELECT slug, modified_at FROM wp_articles ORDER BY modified_at DESC`)
+      .prepare(
+        `SELECT slug, modified_at FROM wp_articles WHERE ${sqlWpTypesDashboardClause()} ORDER BY modified_at DESC`,
+      )
       .all() as { slug: string; modified_at: string | null }[];
     const picked: string[] = [];
     for (const row of order) {
@@ -248,7 +251,9 @@ function getWpRows(cfg: AppConfig, slugs: string[] | null, limit: number): WpRow
     if (picked.length === 0) return [];
     const ph = picked.map(() => '?').join(',');
     const full = db
-      .prepare(`SELECT slug, title, content_text, content_html FROM wp_articles WHERE slug IN (${ph})`)
+      .prepare(
+        `SELECT slug, title, content_text, content_html FROM wp_articles WHERE ${sqlWpTypesDashboardClause()} AND slug IN (${ph})`,
+      )
       .all(...picked) as WpRow[];
     const m = new Map(full.map((r) => [r.slug, r]));
     return picked.map((s) => m.get(s)).filter((r): r is WpRow => r != null);

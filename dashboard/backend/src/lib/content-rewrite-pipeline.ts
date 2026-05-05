@@ -5,7 +5,11 @@
 import fs from 'node:fs';
 import Database from 'better-sqlite3';
 import type { AppConfig } from '../config.js';
-import type { IlSuggestion } from './interlinking.js';
+import {
+  ensureInterlinkSuggestionsForSlug,
+  suggestionHasContent,
+  type IlSuggestion,
+} from './interlinking.js';
 import type { RewriteStagingItem } from './content-rewrite-files.js';
 import {
   clearRewriteStagingDir,
@@ -18,6 +22,7 @@ import {
   writeStagingHtmlFile,
 } from './content-rewrite-files.js';
 import { createDraftDuplicate, loadWpRestConfig } from './wordpress-write.js';
+import { sqlWpTypesDashboardClause } from './wp-dashboard-types.js';
 import { log } from './logger.js';
 import { hasTable } from './nanoclaw-db.js';
 import { runOrchestratedArticleRewrite } from './content-rewrite-agents.js';
@@ -148,6 +153,65 @@ function formatInterlinkHints(slug: string, map: Record<string, IlSuggestion>): 
   return lines.join('\n');
 }
 
+/** Outbound/inbound neighbours from synced `wp_links` so writers get concrete URLs without running the Claude interlink job. */
+function buildInternalLinkHintsFromWpDb(db: Database.Database, slug: string): string {
+  if (!hasTable(db, 'wp_articles') || !hasTable(db, 'wp_links')) return '';
+
+  type Row = { slug: string; title: string | null; url: string | null };
+  const outRows = db
+    .prepare(
+      `
+      SELECT DISTINCT w.slug AS slug, w.title AS title,
+        COALESCE(NULLIF(trim(w.source_url), ''), l.target_url) AS url
+      FROM wp_links l
+      LEFT JOIN wp_articles w ON w.slug = l.target_slug AND (${sqlWpTypesDashboardClause('w')})
+      WHERE l.source_slug = @slug AND l.is_internal = 1 AND l.target_slug IS NOT NULL AND l.target_slug != @slug
+      ORDER BY length(COALESCE(w.title, '')) DESC
+      LIMIT 12
+    `,
+    )
+    .all({ slug }) as Row[];
+
+  const inRows = db
+    .prepare(
+      `
+      SELECT DISTINCT w.slug AS slug, w.title AS title, w.source_url AS url
+      FROM wp_links l
+      INNER JOIN wp_articles w ON w.slug = l.source_slug AND (${sqlWpTypesDashboardClause('w')})
+      WHERE l.target_slug = @slug AND l.is_internal = 1 AND l.source_slug IS NOT NULL AND l.source_slug != @slug
+      ORDER BY length(COALESCE(w.title, '')) DESC
+      LIMIT 10
+    `,
+    )
+    .all({ slug }) as Row[];
+
+  if (!outRows.length && !inRows.length) return '';
+
+  const lines = [
+    'Internal URLs from current WordPress link graph (prefer 4–8 Markdown links scattered in the body; match anchor text to reader intent):',
+  ];
+  for (const r of outRows) {
+    const url = r.url?.trim();
+    const label = r.title?.trim() || r.slug.replace(/-/g, ' ');
+    if (url) lines.push(`- [${label}](${url})  (slug ${r.slug})`);
+    else lines.push(`- /${r.slug}/ — "${label}" (URL from sync incomplete; use site canonical path if needed)`);
+  }
+  if (inRows.length) {
+    lines.push('Pages that already link here (good reciprocation / related-topic targets when you outbound):');
+    for (const r of inRows) {
+      const url = r.url?.trim();
+      const label = r.title?.trim() || r.slug.replace(/-/g, ' ');
+      if (url) lines.push(`- [${label}](${url})`);
+      else lines.push(`- /${r.slug}/ — "${label}"`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function mergeInterlinkHints(primary: string, fromGraph: string): string {
+  return [primary?.trim(), fromGraph?.trim()].filter(Boolean).join('\n\n');
+}
+
 export function failNotesFromChecks(checksJson: string): string {
   try {
     const o = JSON.parse(checksJson) as Record<string, { status?: string; note?: string }>;
@@ -188,7 +252,7 @@ function pickCandidates(
       `SELECT a.slug, a.seo_score, a.geo_score, a.summary, a.checks_json,
               w.wp_id, w.wp_type, w.title, w.content_html, w.content_text, w.source_url, w.excerpt
        FROM seo_audits a
-       INNER JOIN wp_articles w ON w.slug = a.slug
+       INNER JOIN wp_articles w ON w.slug = a.slug AND ${sqlWpTypesDashboardClause('w')}
        WHERE w.content_html IS NOT NULL AND length(trim(w.content_html)) > 50
        ORDER BY a.seo_score ASC, a.geo_score ASC`,
     )
@@ -295,7 +359,9 @@ async function processOneItem(
           content_text: string | null;
         }
       | undefined) ??
-    (db.prepare(`SELECT content_html, title, excerpt, content_text FROM wp_articles WHERE slug = ?`).get(slug) as
+    (db.prepare(
+      `SELECT content_html, title, excerpt, content_text FROM wp_articles WHERE slug = ? AND ${sqlWpTypesDashboardClause()} ORDER BY CASE WHEN wp_type = 'page' THEN 0 ELSE 1 END LIMIT 1`,
+    ).get(slug) as
       | {
           content_html: string | null;
           title: string | null;
@@ -327,7 +393,22 @@ async function processOneItem(
   const excerpt = html.excerpt || '';
 
   try {
-    const interHints = formatInterlinkHints(slug, ilMap);
+    let hintsForSlug: Record<string, IlSuggestion> = ilMap;
+    if (!suggestionHasContent(ilMap[slug])) {
+      pushRewriteProgress({
+        stage: 'interlinking',
+        message: 'No saved interlink plan for this slug — generating (Anthropic) then rewriting…',
+        slug,
+      });
+      const generated = await ensureInterlinkSuggestionsForSlug(cfg, slug);
+      if (generated && suggestionHasContent(generated)) {
+        hintsForSlug = { ...ilMap, [slug]: generated };
+      }
+    }
+    const interHints = mergeInterlinkHints(
+      formatInterlinkHints(slug, hintsForSlug),
+      buildInternalLinkHintsFromWpDb(db, slug),
+    );
     const { html: newHtml, researchNotes: research, diagnosisJson, trace } = await runOrchestratedArticleRewrite(cfg, {
       slug,
       title,
@@ -349,10 +430,11 @@ async function processOneItem(
     const relPath = writeStagingHtmlFile(cfg, stagingId, newHtml);
     pushRewriteProgress({
       stage: 'persist',
-      message:
-        trace.final_approved === true
-          ? 'Saved rewritten HTML to staging (reviewer approved)'
-          : 'Saved rewritten HTML to staging (last draft — human QA recommended)',
+      message: !trace.final_approved
+        ? 'Saved rewritten HTML to staging (last draft — human QA recommended)'
+        : trace.soft_approved
+          ? 'Saved rewritten HTML to staging (passed review score gates; meta/schema still in WP)'
+          : 'Saved rewritten HTML to staging (reviewer approved)',
       slug,
     });
     upsertStagingItem(
@@ -632,7 +714,11 @@ export async function uploadRewriteItemToWordpress(
   if (!html) return { ok: false, message: 'No rewritten HTML on disk.' };
 
   const wpCfg = loadWpRestConfig();
-  if (!wpCfg) return { ok: false, message: 'WordPress credentials missing (WP_SITE_URL / WP_USERNAME / WP_APP_PASSWORD).' };
+  if (!wpCfg)
+    return {
+      ok: false,
+      message: 'WordPress credentials missing (WP_SITE_URL / WP_USERNAME or WP_USER / WP_APP_PASSWORD).',
+    };
 
   const base = siteBase(cfg);
   if (!base) return { ok: false, message: 'WP_SITE_URL is required.' };
@@ -641,13 +727,22 @@ export async function uploadRewriteItemToWordpress(
   const srcType = normalizeSyncWpTypeForRest(row.wp_type);
 
   let srcTitle: string | null = null;
+  let sourceRestMetaFallback: Record<string, unknown> | null = null;
   if (fs.existsSync(cfg.DASHBOARD_SQLITE_PATH)) {
     const db = new Database(cfg.DASHBOARD_SQLITE_PATH, { readonly: true, fileMustExist: true });
     try {
       const sr = db
-        .prepare(`SELECT title FROM wp_articles WHERE slug = ? AND wp_type = ?`)
-        .get(row.slug, srcType) as { title: string | null } | undefined;
+        .prepare(`SELECT title, rest_meta_json FROM wp_articles WHERE slug = ? AND wp_type = ?`)
+        .get(row.slug, srcType) as { title: string | null; rest_meta_json: string | null } | undefined;
       srcTitle = sr?.title?.trim() || null;
+      const rawMeta = sr?.rest_meta_json?.trim();
+      if (rawMeta) {
+        try {
+          sourceRestMetaFallback = JSON.parse(rawMeta) as Record<string, unknown>;
+        } catch {
+          sourceRestMetaFallback = null;
+        }
+      }
     } finally {
       db.close();
     }
@@ -667,6 +762,7 @@ export async function uploadRewriteItemToWordpress(
       contentHtml: html,
       draftSlug,
       sourceWpId: srcId,
+      sourceRestMetaFallback,
     });
 
     const fin = new Date().toISOString();

@@ -5,6 +5,8 @@ import { URL } from 'node:url';
 import Database from 'better-sqlite3';
 
 import type { AppConfig } from '../config.js';
+import { omitElementorGeneratedMetaKeys } from './wp-elementor-meta-strip.js';
+import { DASHBOARD_WP_TYPES, isDashboardWpType, sqlWpTypesDashboardClause } from './wp-dashboard-types.js';
 import { log } from './logger.js';
 
 let pathsReady = false;
@@ -54,6 +56,8 @@ interface WordPressApiItem {
   author?: number;
   categories?: number[];
   tags?: number[];
+  /** Present when syncing with authenticated `context=edit` and plugins expose meta to REST (e.g. Elementor). */
+  meta?: Record<string, JsonValue>;
   [key: string]: JsonValue | undefined;
 }
 
@@ -78,6 +82,8 @@ interface WpArticleRecord {
   excerpt: string;
   content_html: string;
   content_text: string;
+  /** JSON-encoded REST `meta` from last sync (`context=edit`), minus bulky Elementor cache keys — includes `_elementor_data` when WP exposes it. */
+  rest_meta_json: string;
   source_url: string;
   author: string;
   published_at: string;
@@ -88,7 +94,7 @@ interface WpArticleRecord {
   sync_hash: string;
 }
 
-interface WpSyncConfig {
+export interface WpSyncConfig {
   baseUrl: string;
   username: string;
   appPassword: string;
@@ -144,6 +150,23 @@ class WpApiError extends Error {
 let wpDb: Database.Database | null = null;
 let wpSyncJob: Promise<SyncResult> | null = null;
 
+/** Remove CPT rows (e.g. elementor_library) and drop link rows if any article row was deleted. */
+function purgeNonDashboardWpArticlesAndStaleLinks(db: Database.Database): void {
+  try {
+    const chk = db
+      .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='wp_articles' LIMIT 1`)
+      .get() as { 1?: number } | undefined;
+    if (!chk) return;
+    const removed = db.prepare(`DELETE FROM wp_articles WHERE wp_type NOT IN ('post', 'page')`).run().changes ?? 0;
+    if (removed > 0) {
+      db.prepare('DELETE FROM wp_links').run();
+      log.info({ removed }, 'wp_articles purged non-dashboard wp_type (dashboard: post + page only)');
+    }
+  } catch (err) {
+    log.warn({ err }, 'wp dashboard type purge failed');
+  }
+}
+
 function getWpDb(): Database.Database {
   if (!pathsReady) {
     throw new Error('WordPress module not initialized: call initWordpressModule(loadConfig()) at startup.');
@@ -155,6 +178,7 @@ function getWpDb(): Database.Database {
   wpDb = new Database(WP_SYNC_DB);
   wpDb.pragma('journal_mode = WAL');
   initWpSchema(wpDb);
+  purgeNonDashboardWpArticlesAndStaleLinks(wpDb);
   return wpDb;
 }
 
@@ -183,6 +207,7 @@ function initWpSchema(db: Database.Database): void {
       excerpt TEXT,
       content_html TEXT,
       content_text TEXT,
+      rest_meta_json TEXT,
       source_url TEXT,
       author TEXT,
       published_at TEXT,
@@ -229,6 +254,23 @@ function initWpSchema(db: Database.Database): void {
   } catch {
     // column exists
   }
+  try {
+    db.exec(`ALTER TABLE wp_articles ADD COLUMN rest_meta_json TEXT`);
+  } catch {
+    // column exists
+  }
+}
+
+/** Create `wp_*` tables on the dashboard DB (e.g. after removing an unreadable sqlite file). */
+export function bootstrapWpArticlesSchema(dbPath: string): void {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const db = new Database(dbPath);
+  try {
+    db.pragma('journal_mode = WAL');
+    initWpSchema(db);
+  } finally {
+    db.close();
+  }
 }
 
 function updateRunProgress(
@@ -267,6 +309,18 @@ function cleanHtml(html: string): string {
     .trim();
 }
 
+/** Persist REST `meta` (Elementor, etc.); strip generated Elementor cache blobs. */
+function serializeWpRestMetaForStorage(meta: unknown): string {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return '';
+  try {
+    const stripped = omitElementorGeneratedMetaKeys(meta as Record<string, unknown>);
+    if (!Object.keys(stripped).length) return '';
+    return JSON.stringify(stripped);
+  } catch {
+    return '';
+  }
+}
+
 function hashRecord(record: WpArticleRecord): string {
   const input = [
     record.wp_id,
@@ -276,6 +330,7 @@ function hashRecord(record: WpArticleRecord): string {
     record.title,
     record.excerpt,
     record.content_html,
+    record.rest_meta_json,
     record.source_url,
     record.modified_at,
     record.categories_json,
@@ -313,11 +368,15 @@ function decodeRendered(v: JsonValue | undefined): string {
   return '';
 }
 
-function loadWpConfig(): WpSyncConfig {
+/** Same env keys as sync. Upload must call this so WP_* parsing matches `runWpSync`. */
+export function loadWpSyncConfig(): WpSyncConfig {
   const site = process.env.WP_SITE_URL || '';
   const apiBaseEnv = process.env.WP_API_BASE_URL || '';
-  const username = process.env.WP_USERNAME || '';
-  const appPassword = process.env.WP_APP_PASSWORD || '';
+  const username = (process.env.WP_USERNAME || process.env.WP_USER || '').trim();
+  /** WP accepts app passwords with or without spaces; stripping avoids .env/compose mangling of spaced blocks. */
+  const appPassword = (process.env.WP_APP_PASSWORD || '')
+    .trim()
+    .replace(/\s+/g, '');
   const statusScope = process.env.WP_STATUS_SCOPE || 'any';
   const apiRequestIntervalMs = Math.max(
     0,
@@ -428,7 +487,8 @@ async function discoverPostTypes(cfg: WpSyncConfig, paceRequest: () => Promise<v
       supports,
     });
   }
-  return types;
+  const allow = new Set<string>(DASHBOARD_WP_TYPES);
+  return types.filter((t) => allow.has(t.slug));
 }
 
 async function discoverTaxonomies(cfg: WpSyncConfig, paceRequest: () => Promise<void>): Promise<TaxonomyDef[]> {
@@ -541,10 +601,11 @@ function getAllWpRowsForGraphify(): WpArticleRecord[] {
       `
     SELECT
       wp_id, wp_type, status, slug, title, excerpt,
-      content_html, content_text, source_url, author,
+      content_html, content_text, rest_meta_json, source_url, author,
       published_at, modified_at, categories_json, tags_json,
       taxonomy_json, sync_hash
     FROM wp_articles
+    WHERE ${sqlWpTypesDashboardClause()}
   `,
     )
     .all() as WpArticleRecord[];
@@ -653,6 +714,7 @@ function buildArticleRecord(
   const author = item.author != null ? String(item.author) : '';
   const publishedAt = typeof item.date === 'string' ? item.date : '';
   const modifiedAt = typeof item.modified === 'string' ? item.modified : '';
+  const restMetaJson = serializeWpRestMetaForStorage(item.meta);
 
   const categories = Array.isArray(item.categories) ? item.categories : [];
   const tags = Array.isArray(item.tags) ? item.tags : [];
@@ -686,6 +748,7 @@ function buildArticleRecord(
     excerpt,
     content_html: contentHtml,
     content_text: contentText,
+    rest_meta_json: restMetaJson,
     source_url: sourceUrl,
     author,
     published_at: publishedAt,
@@ -705,11 +768,11 @@ function upsertArticles(db: Database.Database, rows: WpArticleRecord[]): number 
   const stmt = db.prepare(`
     INSERT INTO wp_articles (
       wp_id, wp_type, status, slug, title, excerpt, content_html, content_text,
-      source_url, author, published_at, modified_at, categories_json, tags_json,
+      rest_meta_json, source_url, author, published_at, modified_at, categories_json, tags_json,
       taxonomy_json, sync_hash, last_synced_at
     ) VALUES (
       @wp_id, @wp_type, @status, @slug, @title, @excerpt, @content_html, @content_text,
-      @source_url, @author, @published_at, @modified_at, @categories_json, @tags_json,
+      @rest_meta_json, @source_url, @author, @published_at, @modified_at, @categories_json, @tags_json,
       @taxonomy_json, @sync_hash, @last_synced_at
     )
     ON CONFLICT(wp_id, wp_type) DO UPDATE SET
@@ -719,6 +782,7 @@ function upsertArticles(db: Database.Database, rows: WpArticleRecord[]): number 
       excerpt = excluded.excerpt,
       content_html = excluded.content_html,
       content_text = excluded.content_text,
+      rest_meta_json = excluded.rest_meta_json,
       source_url = excluded.source_url,
       author = excluded.author,
       published_at = excluded.published_at,
@@ -766,6 +830,7 @@ function buildLinkGraph(baseSiteUrl: string): {
       `
     SELECT wp_id, wp_type, slug, source_url, content_html
     FROM wp_articles
+    WHERE ${sqlWpTypesDashboardClause()}
   `,
     )
     .all() as Array<{
@@ -852,7 +917,7 @@ function buildLinkGraph(baseSiteUrl: string): {
       WHERE is_internal = 1 AND target_key IS NOT NULL
       GROUP BY target_key
     ) incoming ON incoming.target_key = (a.wp_type || ':' || a.wp_id)
-    WHERE COALESCE(incoming.cnt, 0) = 0
+    WHERE ${sqlWpTypesDashboardClause('a')} AND COALESCE(incoming.cnt, 0) = 0
   `,
     )
     .get() as { c: number };
@@ -885,7 +950,7 @@ export function getWpSyncState(): {
   latestRun: Record<string, unknown> | null;
   articleCount: number;
 } {
-  const cfg = loadWpConfig();
+  const cfg = loadWpSyncConfig();
   const db = getWpDb();
   const latestRun = db
     .prepare(
@@ -897,7 +962,9 @@ export function getWpSyncState(): {
   `,
     )
     .get() as Record<string, unknown> | undefined;
-  const count = db.prepare('SELECT COUNT(*) AS c FROM wp_articles').get() as {
+  const count = db
+    .prepare(`SELECT COUNT(*) AS c FROM wp_articles WHERE ${sqlWpTypesDashboardClause()}`)
+    .get() as {
     c: number;
   };
   return {
@@ -941,12 +1008,12 @@ export function startWpSyncJob(): SyncStartResult {
 }
 
 export async function runWpSync(): Promise<SyncResult> {
-  const cfg = loadWpConfig();
+  const cfg = loadWpSyncConfig();
   if (!cfg.baseUrl || !cfg.username || !cfg.appPassword) {
     return {
       ok: false,
       runId: -1,
-      message: 'Missing WP configuration (WP_SITE_URL/WP_API_BASE_URL, WP_USERNAME, WP_APP_PASSWORD).',
+      message: 'Missing WP configuration (WP_SITE_URL/WP_API_BASE_URL, WP_USERNAME or WP_USER, WP_APP_PASSWORD).',
       fetched: 0,
       upserted: 0,
       errors: 1,
@@ -973,6 +1040,7 @@ export async function runWpSync(): Promise<SyncResult> {
   );
   try {
     const paceRequest = createRequestPacer(cfg.apiRequestIntervalMs);
+    purgeNonDashboardWpArticlesAndStaleLinks(db);
     const postTypes = await discoverPostTypes(cfg, paceRequest);
     totalTypes = postTypes.length;
     updateRunProgress(db, runId, {
@@ -1126,17 +1194,20 @@ export function listWpArticles(opts: {
   search?: string;
   limit?: number;
   offset?: number;
+  /** When true, each row includes full `rest_meta_json` (large; WordPress REST meta snapshot). Default false. */
+  includeRestMeta?: boolean;
 }): {
   total: number;
   articles: Array<Record<string, unknown>>;
 } {
   const db = getWpDb();
-  const clauses: string[] = [];
+  const clauses: string[] = [sqlWpTypesDashboardClause('a')];
   const params: Record<string, unknown> = {};
 
-  if (opts.type) {
+  const typeFilter = typeof opts.type === 'string' ? opts.type.trim() : '';
+  if (typeFilter && isDashboardWpType(typeFilter)) {
     clauses.push('a.wp_type = @type');
-    params.type = opts.type;
+    params.type = typeFilter;
   }
   if (opts.status) {
     clauses.push('a.status = @status');
@@ -1151,11 +1222,16 @@ export function listWpArticles(opts: {
     params.cat = `%${opts.category}%`;
   }
 
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+  const where = `WHERE ${clauses.join(' AND ')}`;
   const limit = Math.min(500, Math.max(1, opts.limit || 100));
   const offset = Math.max(0, opts.offset || 0);
   params.limit = limit;
   params.offset = offset;
+
+  const metaCol = opts.includeRestMeta ? ', a.rest_meta_json' : '';
+  /** Light flag for UI — parse-free length check only. */
+  const hasMetaSql = `,
+      CASE WHEN length(trim(COALESCE(a.rest_meta_json, ''))) > 2 THEN 1 ELSE 0 END AS has_rest_meta`;
 
   const totalRow = db
     .prepare(
@@ -1174,7 +1250,7 @@ export function listWpArticles(opts: {
       a.wp_id, a.wp_type, a.status, a.slug, a.title, a.source_url,
       a.categories_json, a.tags_json, a.modified_at, a.last_synced_at,
       COALESCE(outbound.cnt, 0) AS outbound_links,
-      COALESCE(inbound.cnt, 0) AS inbound_links
+      COALESCE(inbound.cnt, 0) AS inbound_links${hasMetaSql}${metaCol}
     FROM wp_articles a
     LEFT JOIN (
       SELECT source_key, COUNT(*) cnt
@@ -1212,6 +1288,7 @@ export function getWpGraph(): {
       `
     SELECT wp_id, wp_type, slug, title, status, categories_json, source_url
     FROM wp_articles
+    WHERE ${sqlWpTypesDashboardClause()}
     ORDER BY wp_type, slug
   `,
     )
@@ -1280,7 +1357,7 @@ export function getWpGraph(): {
       WHERE is_internal = 1 AND target_key IS NOT NULL
       GROUP BY target_key
     ) incoming ON incoming.target_key = (a.wp_type || ':' || a.wp_id)
-    WHERE COALESCE(incoming.cnt, 0) = 0
+    WHERE ${sqlWpTypesDashboardClause('a')} AND COALESCE(incoming.cnt, 0) = 0
   `,
     )
     .get() as { c: number };
@@ -1316,7 +1393,7 @@ export function getWpFeatureCoverage(input: {
   const db = getWpDb();
   const wpSlugs = new Set(
     (
-      db.prepare('SELECT slug FROM wp_articles').all() as Array<{
+      db.prepare(`SELECT slug FROM wp_articles WHERE ${sqlWpTypesDashboardClause()}`).all() as Array<{
         slug: string;
       }>
     ).map((r) => r.slug),

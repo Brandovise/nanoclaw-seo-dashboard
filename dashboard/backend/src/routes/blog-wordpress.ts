@@ -72,6 +72,8 @@ export function createBlogWordpressRouter(cfg: AppConfig, _seo: Database.Databas
         search: q || undefined,
         limit: parseInt(c.req.query('limit') || '100', 10),
         offset: parseInt(c.req.query('offset') || '0', 10),
+        includeRestMeta:
+          c.req.query('include_rest_meta') === '1' || c.req.query('includeRestMeta') === '1',
       });
       return c.json(data);
     } catch (e) {

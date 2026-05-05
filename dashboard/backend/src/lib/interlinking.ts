@@ -8,6 +8,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import type { AppConfig } from '../config.js';
+import { sqlWpTypesDashboardClause } from './wp-dashboard-types.js';
 import { log } from './logger.js';
 import { getWpGraph } from './wordpress-sync.js';
 
@@ -47,6 +48,18 @@ function ensureTables(db: Database.Database): void {
   `);
 }
 
+/** Ensure `interlinking_state` exists (e.g. fresh dashboard DB after reset). */
+export function bootstrapInterlinkingSchema(dbPath: string): void {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const db = new Database(dbPath);
+  try {
+    db.pragma('journal_mode = WAL');
+    ensureTables(db);
+  } finally {
+    db.close();
+  }
+}
+
 function openDashboardRw(cfg: AppConfig): Database.Database {
   fs.mkdirSync(path.dirname(cfg.DASHBOARD_SQLITE_PATH), { recursive: true });
   const db = new Database(cfg.DASHBOARD_SQLITE_PATH);
@@ -55,7 +68,7 @@ function openDashboardRw(cfg: AppConfig): Database.Database {
   return db;
 }
 
-function suggestionHasContent(s: IlSuggestion | undefined): boolean {
+export function suggestionHasContent(s: IlSuggestion | undefined): boolean {
   if (!s) return false;
   const ins = Array.isArray(s.inbound) ? s.inbound.length : 0;
   const outs = Array.isArray(s.outbound) ? s.outbound.length : 0;
@@ -280,7 +293,7 @@ function getWpArticleContext(db: Database.Database, slug: string): WpRowCtx | nu
   if (!hasWpArticlesTable(db)) return null;
   const row = db
     .prepare(
-      `SELECT slug, title, excerpt, categories_json, content_text FROM wp_articles WHERE slug = ? LIMIT 1`,
+      `SELECT slug, title, excerpt, categories_json, content_text FROM wp_articles WHERE slug = ? AND ${sqlWpTypesDashboardClause()} ORDER BY CASE WHEN wp_type = 'page' THEN 0 ELSE 1 END LIMIT 1`,
     )
     .get(slug) as
     | {
@@ -301,6 +314,103 @@ function getWpArticleContext(db: Database.Database, slug: string): WpRowCtx | nu
     seodescription: row.excerpt || '',
     headings: extractHeadingsFromText(text),
   };
+}
+
+/**
+ * Target article + ranked candidate neighbours for Claude interlinking.
+ * Used by batch job (`/api/blog/interlinking/run`) and on-demand during content rewrite when no saved suggestion exists.
+ */
+function collectInterlinkCandidatesForSlug(
+  slug: string,
+  built: ReturnType<typeof buildInterlinkingFromWpGraph>,
+  wpDb: Database.Database,
+  perf: Record<string, number>,
+): { info: WpRowCtx; candidates: WpRowCtx[] } | null {
+  const allNodeList = built.allNodes;
+  const nodeKnown = allNodeList.find((n) => n.id === slug);
+  const info = getWpArticleContext(wpDb, slug);
+  if (!info) return null;
+  const anchorNode = nodeKnown ?? {
+    id: slug,
+    title: info.title,
+    category: info.categoryurl || 'uncategorized',
+    inbound: 0,
+    outbound: 0,
+    wpTypes: [] as string[],
+    wpTypeLabel: 'Post',
+  };
+  const cat = info.categoryurl || anchorNode.category;
+  const sameCat: WpRowCtx[] = [];
+  const otherCat: WpRowCtx[] = [];
+  for (const n of allNodeList) {
+    if (n.id === slug) continue;
+    const row: WpRowCtx = (() => {
+      const ctx = getWpArticleContext(wpDb, n.id);
+      if (ctx) return ctx;
+      return {
+        slug: n.id,
+        title: n.title,
+        seotitle: n.title,
+        categoryurl: n.category,
+        seodescription: '',
+        headings: [],
+      };
+    })();
+    const rcat = row.categoryurl || n.category;
+    if (rcat === cat) sameCat.push(row);
+    else otherCat.push(row);
+  }
+  sameCat.sort((a, b) => (perf[b.slug] || 0) - (perf[a.slug] || 0));
+  otherCat.sort((a, b) => (perf[b.slug] || 0) - (perf[a.slug] || 0));
+  const candidates = [...sameCat, ...otherCat].slice(0, 40);
+  return { info, candidates };
+}
+
+/**
+ * Ensures Claude interlink inbound/outbound suggestions exist for **slug** — returns cached DB row when present,
+ * otherwise calls Anthropic, merges into `interlinking_state`, and returns fresh suggestions (or null on skip/failure).
+ * Used by rewrite pipeline when `interlink_state` lacks this slug but `ANTHROPIC_API_KEY` is set.
+ */
+export async function ensureInterlinkSuggestionsForSlug(cfg: AppConfig, slug: string): Promise<IlSuggestion | null> {
+  const s = typeof slug === 'string' ? slug.trim() : '';
+  if (!s) return null;
+  if (!anthropicKey(cfg)) {
+    log.info({ slug: s }, 'interlink ensure: skipped (no ANTHROPIC_API_KEY)');
+    return null;
+  }
+  const rw = openDashboardRw(cfg);
+  try {
+    const merged = readSuggestions(rw);
+    if (suggestionHasContent(merged[s])) {
+      return merged[s];
+    }
+
+    const built = buildInterlinkingFromWpGraph();
+    const perf = loadGscPerformance(60);
+    const pack = collectInterlinkCandidatesForSlug(s, built, rw, perf);
+    if (!pack || pack.candidates.length === 0) {
+      log.info({ slug: s }, 'interlink ensure: no candidates (WP graph empty or lone page)');
+      return null;
+    }
+
+    let sug: IlSuggestion;
+    try {
+      sug = await suggestInterlinksAnthropic(cfg, pack.info, pack.candidates, perf);
+    } catch (err) {
+      log.warn({ err, slug: s }, 'interlink ensure: Claude call failed');
+      return null;
+    }
+    if (!suggestionHasContent(sug)) {
+      log.info({ slug: s }, 'interlink ensure: Claude returned empty suggestions');
+      return null;
+    }
+    merged[s] = sug;
+    writeSuggestions(rw, merged, new Date().toISOString());
+    log.info({ slug: s, outbound: sug.outbound?.length ?? 0, inbound: sug.inbound?.length ?? 0 }, 'interlink ensure: saved for rewrite');
+    return sug;
+  } finally {
+    rw.close();
+  }
 }
 
 function anthropicKey(cfg: AppConfig): string | undefined {
@@ -461,6 +571,8 @@ export function getInterlinkingPayload(cfg: AppConfig): {
   orphans: IlPublicNode[];
   noInbound: IlPublicNode[];
   weakInbound: IlPublicNode[];
+  /** Every article node in link graph — use to resolve suggestion slugs outside problem buckets (e.g. rewrite on-demand). */
+  fullGraphNodes: IlPublicNode[];
   suggestions: Record<string, IlSuggestion>;
   lastRun: string | null;
   lastGraphUpdated: string | null;
@@ -499,6 +611,7 @@ export function getInterlinkingPayload(cfg: AppConfig): {
     orphans: built.orphans,
     noInbound: built.noInbound,
     weakInbound: built.weakInbound,
+    fullGraphNodes: built.allNodes,
     suggestions,
     lastRun,
     lastGraphUpdated,
@@ -631,58 +744,25 @@ export function startInterlinkingSuggestionsJob(
     try {
       const perf = loadGscPerformance(60);
       let merged = readSuggestions(db);
-      const allNodeList = built.allNodes;
-
+      const wpDb = dashRo ?? db;
       for (let i = 0; i < limited.length; i++) {
         const node = limited[i]!;
         ilState.processed = i + 1;
         ilState.lastMessage = `Claude (${i + 1}/${limited.length}): ${node.id}`;
-        const info: WpRowCtx = (() => {
-          if (dashRo) {
-            const ctx = getWpArticleContext(dashRo, node.id);
-            if (ctx) return ctx;
-          }
-          return {
-            slug: node.id,
-            title: node.title,
-            seotitle: node.title,
-            categoryurl: node.category,
-            seodescription: '',
-            headings: [],
-          };
-        })();
 
-        const cat = info.categoryurl || node.category;
-        const sameCat: WpRowCtx[] = [];
-        const otherCat: WpRowCtx[] = [];
-        for (const n of allNodeList) {
-          if (n.id === node.id) continue;
-          const row: WpRowCtx = (() => {
-            if (dashRo) {
-              const ctx = getWpArticleContext(dashRo, n.id);
-              if (ctx) return ctx;
-            }
-            return {
-              slug: n.id,
-              title: n.title,
-              seotitle: n.title,
-              categoryurl: n.category,
-              seodescription: '',
-              headings: [],
-            };
-          })();
-          const rcat = row.categoryurl || n.category;
-          if (rcat === cat) sameCat.push(row);
-          else otherCat.push(row);
+        const pack = collectInterlinkCandidatesForSlug(node.id, built, wpDb, perf);
+        if (!pack || pack.candidates.length === 0) {
+          log.warn({ slug: node.id }, 'interlinking batch: no candidates for node');
+          if (i + 1 < limited.length) await sleep(1000);
+          continue;
         }
-        sameCat.sort((a, b) => (perf[b.slug] || 0) - (perf[a.slug] || 0));
-        otherCat.sort((a, b) => (perf[b.slug] || 0) - (perf[a.slug] || 0));
-        const candidates = [...sameCat, ...otherCat].slice(0, 40);
 
         try {
-          const sug = await suggestInterlinksAnthropic(cfg, info, candidates, perf);
-          merged = { ...merged, [node.id]: sug };
-          writeSuggestions(db, merged, new Date().toISOString());
+          const sug = await suggestInterlinksAnthropic(cfg, pack.info, pack.candidates, perf);
+          if (suggestionHasContent(sug)) {
+            merged = { ...merged, [node.id]: sug };
+            writeSuggestions(db, merged, new Date().toISOString());
+          }
         } catch (e) {
           log.warn({ err: e, slug: node.id }, 'interlinking Claude call failed');
           // Do not persist empty on error so a later run (resume) retries this slug.
