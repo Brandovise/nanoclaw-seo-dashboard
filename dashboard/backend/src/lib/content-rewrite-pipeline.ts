@@ -632,6 +632,7 @@ export function startContentRewritePipelineJob(
     };
   }
 
+  
   const now = new Date().toISOString();
   rewriteState.running = true;
   rewriteState.stopRequested = false;
