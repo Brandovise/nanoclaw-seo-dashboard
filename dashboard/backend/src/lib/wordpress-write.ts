@@ -1,7 +1,23 @@
 /**
  * WordPress REST write helpers — create a new draft (unpublished) post/page from rewritten HTML.
- * Source post is never required for the create; taxonomies are copied only when the REST user can read the source.
+ *
+ * Elementor strategy:
+ *   1. Sanitize the formatter HTML to a plain semantic article-body fragment (h1–h6, p,
+ *      ul/ol/li, blockquote, table, a, img, strong/em, …). Everything Elementor-specific
+ *      (wrappers, scripts, classes, data-*) is stripped.
+ *   2. Walk the source `_elementor_data` and pick widget *prototypes* — the first heading
+ *      widget per header_size, the first text-editor, the first icon-list (with its icon /
+ *      typography / spacing settings), and the outer container's layout settings.
+ *   3. Rebuild `_elementor_data` from the new content using those prototypes: each heading
+ *      block becomes a heading widget with the source's heading typography; each list
+ *      block becomes an icon-list widget with the source's icon (e.g. `fas fa-circle`,
+ *      `fas fa-check`) reused per item; paragraph blocks become text-editor widgets with
+ *      the source's editor typography. Source widget *content* is discarded so no old
+ *      article fragments can render under the new one — but the *styling* is preserved.
+ *   4. `post_content` is also set to the cleaned HTML so feeds, AMP, and non-Elementor
+ *      rendering paths still show the article correctly.
  */
+import { randomBytes } from 'node:crypto';
 import { loadWpSyncConfig } from './wordpress-sync.js';
 import { ELEMENTOR_GENERATED_META_KEYS } from './wp-elementor-meta-strip.js';
 import { log } from './logger.js';
@@ -68,269 +84,791 @@ type WpTypeEntry = { rest_base?: string };
 type PostEdit = {
   id: number;
   slug?: string;
+  template?: string;
   categories?: number[];
   tags?: number[];
   featured_media?: number;
   meta?: Record<string, unknown>;
 };
 
-type ElementorWalkerNode = {
-  elType?: string;
-  widgetType?: string;
-  settings?: Record<string, unknown>;
-  elements?: unknown[];
-};
+// ──────────────────────────────────────────────────────────────────────────────
+// HTML sanitization → semantic article body
+// ──────────────────────────────────────────────────────────────────────────────
 
-/** Rough proxy for “primary body” widget: replace the largest HTML blob. */
-function htmlPlainTextApproxLen(html: string): number {
-  return html
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim().length;
+const ALLOWED_BLOCK_TAGS = new Set([
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'p', 'ul', 'ol', 'li', 'blockquote',
+  'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption',
+  'pre', 'figure', 'figcaption',
+  'hr', 'br',
+]);
+
+const ALLOWED_INLINE_TAGS = new Set([
+  'a', 'strong', 'em', 'b', 'i', 'u', 's', 'code', 'sup', 'sub', 'small', 'mark', 'img',
+]);
+
+const ALLOWED_TAGS = new Set([...ALLOWED_BLOCK_TAGS, ...ALLOWED_INLINE_TAGS]);
+const VOID_TAGS = new Set(['br', 'hr', 'img']);
+
+const STRIP_BLOCK_TAGS = [
+  'script', 'style', 'noscript', 'iframe', 'svg', 'form', 'button',
+  'select', 'option', 'textarea', 'audio', 'video', 'canvas', 'object', 'embed',
+  'input', 'label', 'fieldset', 'legend',
+];
+
+function escapeAttrValue(v: string): string {
+  return v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
-function likelyNonArticleHtml(raw: string): boolean {
-  const t = raw.toLowerCase();
-  return t.includes('<style') || t.includes('<script') || t.includes('<form');
-}
-
-/** Strip full-document chrome when REST `content.rendered` was a complete HTML page. */
-function stripOuterDocumentShell(html: string): string {
-  let h = html.trim();
-  if (!h) return h;
-  h = h.replace(/<!DOCTYPE[^>]*>/i, '').trim();
-  h = h.replace(/<\?xml[^>]*\?>/i, '').trim();
-  const bodyM = h.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i);
-  if (bodyM?.[1]?.trim()) return bodyM[1].trim();
-  h = h.replace(/^<html\b[^>]*>/i, '').replace(/<\/html>\s*$/i, '').trim();
-  h = h.replace(/<head\b[^>]*>[\s\S]*?<\/head>/i, '').trim();
-  return h;
-}
-
-function longestTagInner(html: string, tagName: string): string | null {
-  const re = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)</${tagName}>`, 'gi');
-  let best = '';
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null) {
-    const inner = (m[1] ?? '').trim();
-    if (inner.length > best.length) best = inner;
-  }
-  return best.length >= 200 ? best : null;
-}
-
-/** Balanced inner HTML for a single opening `<div …>` whose `>` ends at `openAfterGt` (exclusive index of first inner char). */
-function extractBalancedDivInner(html: string, openAfterGt: number): { inner: string; end: number } | null {
-  let depth = 1;
-  let pos = openAfterGt;
-  const start = pos;
-  const lower = html.toLowerCase();
-  while (pos < html.length && depth > 0) {
-    const idxDiv = lower.indexOf('<div', pos);
-    const idxClose = lower.indexOf('</div>', pos);
-    if (idxClose === -1) return null;
-    if (idxDiv !== -1 && idxDiv < idxClose) {
-      depth += 1;
-      pos = idxDiv + 4;
-    } else {
-      depth -= 1;
-      if (depth === 0) {
-        return { inner: html.slice(start, idxClose), end: idxClose + 6 };
-      }
-      pos = idxClose + 6;
-    }
-  }
-  return null;
+function extractAttr(attrs: string, name: string): string | null {
+  const re = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`, 'i');
+  const m = attrs.match(re);
+  if (!m) return null;
+  return (m[2] ?? m[3] ?? m[4] ?? '').trim();
 }
 
 /**
- * When the formatter preserved the full Elementor front-end tree, pull the largest
- * `elementor-widget-container` island so we do not nest a whole page inside one Text/HTML widget.
+ * Aggressive deterministic cleanup. Takes the formatter output (which often mirrors
+ * the full Elementor frontend tree) and produces a plain semantic article-body fragment
+ * suitable for a single text-editor widget.
  */
-function largestElementorWidgetContainerInner(html: string): string | null {
-  if (!/elementor-widget-container/i.test(html)) return null;
-  const re = /<div\b[^>]*\belementor-widget-container\b[^>]*>/gi;
-  let best = '';
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null) {
-    const afterGt = m.index + m[0].length;
-    const parsed = extractBalancedDivInner(html, afterGt);
-    if (!parsed) continue;
-    const inner = parsed.inner.trim();
-    if (inner.length < 80) continue;
-    if (likelyNonArticleHtml(inner)) continue;
-    if (htmlPlainTextApproxLen(inner) > htmlPlainTextApproxLen(best)) best = inner;
-  }
-  return best.length > 0 ? best : null;
-}
+export function cleanHtmlToSemanticBody(raw: string): string {
+  if (!raw) return '';
+  let h = raw;
 
-/**
- * Formatter output often mirrors `content.rendered` (full Elementor page). For `_elementor_data`
- * injection we need a **single-widget** fragment: unwrap document/article layers and, when needed,
- * the largest Elementor rich-text container so layout stays valid and duplicates shrink.
- */
-function sanitizeHtmlForElementorSingleWidget(html: string): string {
-  const rawLen = html.trim().length;
-  let h = stripOuterDocumentShell(html.trim());
-  if (!h) return h;
-  const mainInner = longestTagInner(h, 'main');
-  if (mainInner && htmlPlainTextApproxLen(mainInner) >= Math.min(280, htmlPlainTextApproxLen(h) * 0.18)) {
-    h = mainInner;
+  // 1. Document chrome
+  h = h.replace(/<!DOCTYPE[^>]*>/gi, '');
+  h = h.replace(/<\?xml[^>]*\?>/gi, '');
+  h = h.replace(/<\/?(html|head|body)\b[^>]*>/gi, '');
+
+  // 2. HTML comments (including WP block comments — they don't help inside Elementor)
+  h = h.replace(/<!--[\s\S]*?-->/g, '');
+
+  // 3. Strip dangerous / unwanted tags AND their content
+  for (const tag of STRIP_BLOCK_TAGS) {
+    const blockRe = new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?</${tag}>`, 'gi');
+    const selfRe = new RegExp(`<${tag}\\b[^>]*/>`, 'gi');
+    const openRe = new RegExp(`<${tag}\\b[^>]*>`, 'gi');
+    const closeRe = new RegExp(`</${tag}\\s*>`, 'gi');
+    h = h.replace(blockRe, '').replace(selfRe, '').replace(openRe, '').replace(closeRe, '');
   }
-  const articleInner = longestTagInner(h, 'article');
-  if (articleInner && htmlPlainTextApproxLen(articleInner) >= Math.min(400, htmlPlainTextApproxLen(h) * 0.2)) {
-    h = articleInner;
-  }
-  if (/elementor-widget-container|data-elementor-type/i.test(html)) {
-    const island = largestElementorWidgetContainerInner(h);
-    const islandPlain = island ? htmlPlainTextApproxLen(island) : 0;
-    const hPlain = htmlPlainTextApproxLen(h);
-    if (island && islandPlain >= 120 && (rawLen > 9000 || islandPlain >= hPlain * 0.32)) {
-      h = island;
+
+  // 4. Walk every tag: rewrite allowed tags with whitelisted attrs, drop non-allowed tags
+  //    (drop the tag, keep inner content — i.e. unwrap divs/sections/articles/spans).
+  h = h.replace(/<\/?([a-zA-Z][a-zA-Z0-9-]*)\b([^>]*)>/g, (_match, tagRaw: string, attrsRaw: string) => {
+    const tag = tagRaw.toLowerCase();
+    const isClosing = _match.startsWith('</');
+    if (!ALLOWED_TAGS.has(tag)) return '';
+
+    if (isClosing) {
+      if (VOID_TAGS.has(tag)) return '';
+      return `</${tag}>`;
     }
+
+    let attrs = '';
+    if (tag === 'a') {
+      const href = extractAttr(attrsRaw, 'href');
+      const title = extractAttr(attrsRaw, 'title');
+      if (href) attrs += ` href="${escapeAttrValue(href)}"`;
+      if (title) attrs += ` title="${escapeAttrValue(title)}"`;
+      // Mark external links open in new tab is a theme choice; leave default behavior.
+    } else if (tag === 'img') {
+      const src = extractAttr(attrsRaw, 'src');
+      const alt = extractAttr(attrsRaw, 'alt');
+      const title = extractAttr(attrsRaw, 'title');
+      if (!src) return ''; // drop broken <img>
+      attrs += ` src="${escapeAttrValue(src)}"`;
+      attrs += ` alt="${escapeAttrValue(alt ?? '')}"`;
+      if (title) attrs += ` title="${escapeAttrValue(title)}"`;
+    }
+
+    if (VOID_TAGS.has(tag)) return `<${tag}${attrs} />`;
+    return `<${tag}${attrs}>`;
+  });
+
+  // 5. Drop empty inline/block wrappers introduced by the unwrap step.
+  //    (Font-awesome <i class="fas fa-…"></i> icon tags become empty after attrs are stripped — drop them.)
+  for (let i = 0; i < 4; i += 1) {
+    const before = h;
+    h = h.replace(/<(i|b|em|strong|u|s|small|mark|sup|sub|code|a)>\s*<\/\1>/gi, '');
+    h = h.replace(/<(p|li|h[1-6]|blockquote|figcaption|td|th|caption)>\s*<\/\1>/gi, '');
+    h = h.replace(/<(ul|ol|table|thead|tbody|tfoot|tr|figure)>\s*<\/\1>/gi, '');
+    if (h === before) break;
   }
+
+  // 6. Whitespace normalization (preserve paragraph structure)
+  h = h.replace(/[ \t]+/g, ' ');
+  h = h.replace(/\s*\n\s*\n+\s*/g, '\n\n');
+  h = h.replace(/>\s+</g, '><');
+
   return h.trim();
 }
 
-/**
- * Inject rewritten HTML into the largest Elementor Text Editor or HTML widget.
- * Leaves layout/sections intact; preserves Elementor-openable drafts when source was built with Elementor.
- */
-function injectHtmlIntoElementorDataJson(rawData: unknown, newHtml: string): { injected: boolean; data: unknown } {
-  if (newHtml.length === 0) return { injected: false, data: rawData };
-  let parsed: unknown = rawData;
-  if (typeof rawData === 'string') {
-    try {
-      parsed = JSON.parse(rawData) as unknown;
-    } catch {
-      return { injected: false, data: rawData };
-    }
-  }
-  const roots = Array.isArray(parsed) ? parsed : null;
-  if (!roots) return { injected: false, data: rawData };
+// ──────────────────────────────────────────────────────────────────────────────
+// Source widget prototypes + content-block parser
+// ──────────────────────────────────────────────────────────────────────────────
 
-  type Candidate = {
-    holder: Record<string, unknown>;
-    field: string;
-    score: number;
-    widgetType: string;
-    raw: string;
-  };
-  let best: Candidate | undefined;
-  const candidates: Candidate[] = [];
-
-  const visit = (node: unknown): void => {
-    if (!node || typeof node !== 'object') return;
-    const n = node as ElementorWalkerNode;
-    const children = n.elements;
-    if (Array.isArray(children)) {
-      for (const c of children) visit(c);
-    }
-    if (n.elType !== 'widget' || !n.settings || typeof n.settings !== 'object') return;
-    const wt = typeof n.widgetType === 'string' ? n.widgetType : '';
-    const pick = (field: string) => {
-      const v = n.settings![field];
-      if (typeof v !== 'string' || !v.trim()) return;
-      const score = htmlPlainTextApproxLen(v);
-      const c: Candidate = { holder: n.settings as Record<string, unknown>, field, score, widgetType: wt, raw: v };
-      candidates.push(c);
-      if (!best || score > best.score) best = c;
-    };
-    if (wt === 'text-editor') pick('editor');
-    if (wt === 'html') pick('html');
-  };
-
-  for (const r of roots) visit(r);
-  if (!best) return { injected: false, data: parsed };
-  if (best.score < 15) return { injected: false, data: parsed };
-  if (best.score < 40) {
-    log.warn(
-      { bestScore: best.score, widgetType: best.widgetType },
-      'wordpress elementor: primary text/html widget is small — injecting anyway to avoid leaving stale body in other widgets',
-    );
-  }
-  best.holder[best.field] = newHtml;
-
-  const isProtectedWidgetField = (widgetType: string, field: string, raw: string): boolean => {
-    const wt = widgetType.toLowerCase();
-    const f = field.toLowerCase();
-    if (wt.includes('form')) return true;
-    if (wt.includes('shortcode')) return true;
-    if (likelyNonArticleHtml(raw)) return true;
-    if (
-      /(^_|id$|class$|css|script|shortcode|url|link|href|placeholder|button|submit|label|name|email|tel|phone|captcha)/i.test(
-        f,
-      )
-    ) {
-      return true;
-    }
-    return false;
-  };
-  const strictCleanup = process.env.WP_ELEMENTOR_STRICT_CLEANUP === 'true';
-  /** Always clear other large Text/HTML widgets so the old article does not stack under the new body. */
-  const siblingClearThreshold = Math.max(90, Math.min(420, Math.floor(best.score * 0.13)));
-  const strictExtraThreshold = Math.max(55, Math.floor(best.score * 0.08));
-  let cleared = 0;
-  for (const c of candidates) {
-    if (c === best) continue;
-    if (isProtectedWidgetField(c.widgetType, c.field, c.raw)) continue;
-    const passesSibling = c.score >= siblingClearThreshold;
-    const passesStrictExtra = strictCleanup && c.score >= strictExtraThreshold;
-    if (!passesSibling && !passesStrictExtra) continue;
-    c.holder[c.field] = '';
-    cleared += 1;
-  }
-
-  // Some themes/pages keep article body fragments in non text-editor widgets
-  // (e.g., icon-box descriptions/headings). Clear residual narrative fields broadly.
-  // We intentionally keep protected fields (forms/shortcodes/css/script/url/labels, etc.).
-  const secondaryThreshold = 18;
-  const clearNestedStrings = (widgetType: string, root: unknown, path: string[] = []): unknown => {
-    if (typeof root === 'string') {
-      const key = path[path.length - 1] || '';
-      const score = htmlPlainTextApproxLen(root);
-      if (score < secondaryThreshold) return root;
-      if (isProtectedWidgetField(widgetType, key, root)) return root;
-      cleared += 1;
-      return '';
-    }
-    if (Array.isArray(root)) {
-      return root.map((v, i) => clearNestedStrings(widgetType, v, [...path, String(i)]));
-    }
-    if (root && typeof root === 'object') {
-      const obj = root as Record<string, unknown>;
-      for (const [k, v] of Object.entries(obj)) {
-        obj[k] = clearNestedStrings(widgetType, v, [...path, k]);
-      }
-      return obj;
-    }
-    return root;
-  };
-
-  const clearResidualNarrative = (node: unknown): void => {
-    if (!node || typeof node !== 'object') return;
-    const n = node as ElementorWalkerNode;
-    const children = n.elements;
-    if (Array.isArray(children)) {
-      for (const c of children) clearResidualNarrative(c);
-    }
-    if (n.elType !== 'widget' || !n.settings || typeof n.settings !== 'object') return;
-    const wt = typeof n.widgetType === 'string' ? n.widgetType : '';
-    const settings = n.settings as Record<string, unknown>;
-    for (const [field, value] of Object.entries(settings)) {
-      if (best && settings === best.holder && field === best.field) continue;
-      settings[field] = clearNestedStrings(wt, value, [field]);
-    }
-  };
-  if (strictCleanup) {
-    for (const r of roots) clearResidualNarrative(r);
-  }
-
-  log.info(
-    { replacedScore: best.score, cleared, strictCleanup },
-    'wordpress elementor: injected rewritten body into primary widget',
-  );
-  return { injected: true, data: parsed };
+function elementorId(): string {
+  // Source data uses 7-hex IDs (e.g. "bdb86d5", "8b0ddc7"); match that shape so
+  // the regenerated tree is indistinguishable from a hand-edited one.
+  return randomBytes(4).toString('hex').slice(0, 7);
 }
+
+type ElementorElement = {
+  id: string;
+  elType: string;
+  settings: Record<string, unknown>;
+  elements: ElementorElement[];
+  isInner: boolean;
+  widgetType?: string;
+};
+
+type WidgetPrototypes = {
+  /** First heading widget per `header_size` value ("h1" → widget). Falls back to a generic prototype if specific size missing. */
+  headings: Map<string, ElementorElement>;
+  textEditor: ElementorElement | null;
+  iconList: ElementorElement | null;
+  iconBox: ElementorElement | null;
+  /** First top-level container/section — its settings define the page-body wrapper (boxed_width, padding, …). */
+  outerWrapper: ElementorElement | null;
+};
+
+function deepClone<T>(v: T): T {
+  return JSON.parse(JSON.stringify(v)) as T;
+}
+
+function isElementorElement(v: unknown): v is ElementorElement {
+  return !!v && typeof v === 'object' && 'elType' in (v as Record<string, unknown>);
+}
+
+function parseElementorData(raw: unknown): ElementorElement[] | null {
+  let data: unknown = raw;
+  if (typeof data === 'string') {
+    const trimmed = data.trim();
+    if (!trimmed) return null;
+    try {
+      data = JSON.parse(trimmed);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(data)) return null;
+  return data.filter(isElementorElement);
+}
+
+function collectPrototypes(elements: ElementorElement[]): WidgetPrototypes {
+  const protos: WidgetPrototypes = {
+    headings: new Map(),
+    textEditor: null,
+    iconList: null,
+    iconBox: null,
+    outerWrapper: null,
+  };
+  // First top-level container/section becomes the wrapper prototype.
+  for (const el of elements) {
+    if (el.elType === 'container' || el.elType === 'section') {
+      protos.outerWrapper = el;
+      break;
+    }
+  }
+  const visit = (els: ElementorElement[]): void => {
+    for (const el of els) {
+      if (el.elType === 'widget') {
+        const settings = (el.settings ?? {}) as Record<string, unknown>;
+        if (el.widgetType === 'heading') {
+          const sizeRaw = settings.header_size;
+          const size = typeof sizeRaw === 'string' && sizeRaw ? sizeRaw : 'h2';
+          if (!protos.headings.has(size)) protos.headings.set(size, el);
+        } else if (el.widgetType === 'text-editor' && !protos.textEditor) {
+          protos.textEditor = el;
+        } else if (el.widgetType === 'icon-list' && !protos.iconList) {
+          protos.iconList = el;
+        } else if (el.widgetType === 'icon-box' && !protos.iconBox) {
+          protos.iconBox = el;
+        }
+      }
+      if (Array.isArray(el.elements) && el.elements.length) visit(el.elements);
+    }
+  };
+  visit(elements);
+  return protos;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// HTML → content blocks (heading / paragraph / list)
+// ──────────────────────────────────────────────────────────────────────────────
+
+type ContentBlock =
+  | { type: 'heading'; level: number; text: string }
+  | { type: 'paragraph'; html: string }
+  | { type: 'list'; ordered: boolean; items: string[] };
+
+function stripTags(html: string): string {
+  return html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function decodeBasicEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
+function extractListItems(listInner: string): string[] {
+  const items: string[] = [];
+  const re = /<li\b[^>]*>([\s\S]*?)<\/li>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(listInner)) !== null) {
+    const inner = (m[1] ?? '').trim();
+    // Items keep inline tags (a/strong/em); just collapse whitespace.
+    const cleaned = inner.replace(/\s+/g, ' ').trim();
+    if (cleaned) items.push(cleaned);
+  }
+  return items;
+}
+
+/**
+ * Walk the cleaned semantic HTML and pull out top-level blocks in document order.
+ * The cleaner has already stripped wrappers, so the input is essentially a sequence
+ * of `<h1>…<h6>`, `<p>`, `<ul>/<ol>`, `<blockquote>`, `<table>`, `<figure>` siblings.
+ */
+export function htmlToContentBlocks(html: string): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+  if (!html) return blocks;
+  // Match each top-level block element. `[\s\S]*?` is non-greedy across newlines.
+  const blockRe =
+    /<(h[1-6]|p|ul|ol|blockquote|table|figure|pre)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(html)) !== null) {
+    const tag = (m[1] ?? '').toLowerCase();
+    const inner = m[3] ?? '';
+    if (/^h[1-6]$/.test(tag)) {
+      const level = Number(tag[1]);
+      const text = decodeBasicEntities(stripTags(inner));
+      if (text) blocks.push({ type: 'heading', level, text });
+    } else if (tag === 'p') {
+      const trimmed = inner.trim();
+      if (trimmed) blocks.push({ type: 'paragraph', html: `<p>${trimmed}</p>` });
+    } else if (tag === 'ul' || tag === 'ol') {
+      const items = extractListItems(inner);
+      if (items.length) blocks.push({ type: 'list', ordered: tag === 'ol', items });
+    } else {
+      // blockquote / table / figure / pre — keep the whole element verbatim as a paragraph block.
+      const verbatim = `<${tag}>${inner}</${tag}>`;
+      if (inner.trim()) blocks.push({ type: 'paragraph', html: verbatim });
+    }
+  }
+  const withStrongBullets = normalizeParagraphBullets(blocks);
+  return normalizeColonLedParagraphLists(withStrongBullets);
+}
+
+function tryListItemFromParagraph(paragraphHtml: string): string | null {
+  const m = paragraphHtml.match(/^<p>\s*<strong>([\s\S]*?)<\/strong>\s*([\s\S]*?)\s*<\/p>$/i);
+  if (!m) return null;
+  const strongText = decodeBasicEntities(stripTags(m[1] ?? '')).trim();
+  const restText = decodeBasicEntities(stripTags(m[2] ?? '')).trim();
+  if (!strongText) return null;
+  const cleanedStrong = strongText.endsWith(':') ? strongText.slice(0, -1).trim() : strongText;
+  const full = restText ? `${cleanedStrong}: ${restText}` : cleanedStrong;
+  if (full.length < 8) return null;
+  return full;
+}
+
+function normalizeParagraphBullets(blocks: ContentBlock[]): ContentBlock[] {
+  if (!blocks.length) return blocks;
+  const out: ContentBlock[] = [];
+  let i = 0;
+  while (i < blocks.length) {
+    const b = blocks[i];
+    if (b.type !== 'paragraph') {
+      out.push(b);
+      i += 1;
+      continue;
+    }
+    const firstItem = tryListItemFromParagraph(b.html);
+    if (!firstItem) {
+      out.push(b);
+      i += 1;
+      continue;
+    }
+    const items: string[] = [firstItem];
+    let j = i + 1;
+    while (j < blocks.length) {
+      const n = blocks[j];
+      if (n.type !== 'paragraph') break;
+      const item = tryListItemFromParagraph(n.html);
+      if (!item) break;
+      items.push(item);
+      j += 1;
+    }
+    if (items.length >= 2) {
+      out.push({ type: 'list', ordered: false, items });
+      i = j;
+    } else {
+      out.push(b);
+      i += 1;
+    }
+  }
+  return out;
+}
+
+function paragraphText(paragraphHtml: string): string {
+  return decodeBasicEntities(stripTags(paragraphHtml)).replace(/\s+/g, ' ').trim();
+}
+
+function looksLikeListLeadParagraph(paragraphHtml: string): boolean {
+  const text = paragraphText(paragraphHtml);
+  if (!text) return false;
+  return text.endsWith(':');
+}
+
+function looksLikeSimpleListItemParagraph(paragraphHtml: string): boolean {
+  const hasRichInlineMarkup = /<(a|strong|em|b|i|u|img|table|blockquote|figure|pre)\b/i.test(paragraphHtml);
+  if (hasRichInlineMarkup) return false;
+  const text = paragraphText(paragraphHtml);
+  if (!text) return false;
+  if (text.length > 180) return false;
+  if (/[.!?]\s*$/.test(text)) return false;
+  return true;
+}
+
+function normalizeColonLedParagraphLists(blocks: ContentBlock[]): ContentBlock[] {
+  if (!blocks.length) return blocks;
+  const out: ContentBlock[] = [];
+  let i = 0;
+  while (i < blocks.length) {
+    const b = blocks[i];
+    if (b.type !== 'paragraph' || !looksLikeListLeadParagraph(b.html)) {
+      out.push(b);
+      i += 1;
+      continue;
+    }
+    const items: string[] = [];
+    let j = i + 1;
+    while (j < blocks.length) {
+      const n = blocks[j];
+      if (n.type !== 'paragraph') break;
+      if (!looksLikeSimpleListItemParagraph(n.html)) break;
+      items.push(paragraphText(n.html));
+      j += 1;
+    }
+    if (items.length >= 2) {
+      out.push(b);
+      out.push({ type: 'list', ordered: false, items });
+      i = j;
+    } else {
+      out.push(b);
+      i += 1;
+    }
+  }
+  return out;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Widget builders (clone prototype, swap content)
+// ──────────────────────────────────────────────────────────────────────────────
+
+function makeWidget(
+  widgetType: string,
+  settings: Record<string, unknown>,
+): ElementorElement {
+  return {
+    id: elementorId(),
+    elType: 'widget',
+    widgetType,
+    settings,
+    elements: [],
+    isInner: false,
+  };
+}
+
+function buildHeadingWidget(
+  proto: ElementorElement | undefined,
+  text: string,
+  level: number,
+): ElementorElement {
+  const settings = proto?.settings ? deepClone(proto.settings as Record<string, unknown>) : {};
+  settings.title = text;
+  settings.header_size = `h${level}`;
+  return makeWidget('heading', settings);
+}
+
+function buildTextEditorWidget(
+  proto: ElementorElement | null,
+  html: string,
+): ElementorElement {
+  const settings = proto?.settings ? deepClone(proto.settings as Record<string, unknown>) : {};
+  settings.editor = html;
+  return makeWidget('text-editor', settings);
+}
+
+function buildIconListWidget(
+  proto: ElementorElement | null,
+  items: string[],
+): ElementorElement {
+  if (!proto?.settings) {
+    // Fallback — no icon-list prototype available; render as a text-editor `<ul>`.
+    const ulHtml = `<ul>${items.map((t) => `<li>${t}</li>`).join('')}</ul>`;
+    return buildTextEditorWidget(null, ulHtml);
+  }
+  const settings = deepClone(proto.settings as Record<string, unknown>);
+
+  // The icon_list field is an array on the live tree but a JSON string when re-serialized
+  // back into _elementor_data. Normalize to an array, build a per-item template from the
+  // first existing item (so we keep its `selected_icon`), then write back as an array —
+  // JSON.stringify on the whole tree will encode it correctly.
+  let existing: unknown = settings.icon_list;
+  if (typeof existing === 'string') {
+    try {
+      existing = JSON.parse(existing);
+    } catch {
+      existing = [];
+    }
+  }
+  const existingArr = Array.isArray(existing) ? (existing as Record<string, unknown>[]) : [];
+  const itemTemplate: Record<string, unknown> | null =
+    existingArr.length > 0 ? deepClone(existingArr[0] as Record<string, unknown>) : null;
+
+  const newItems: Record<string, unknown>[] = items.map((text) => {
+    const item: Record<string, unknown> = itemTemplate ? deepClone(itemTemplate) : {};
+    item._id = elementorId();
+    item.text = text;
+    // The source's links pointed at the source post's anchors — drop them so the new draft
+    // doesn't carry stale `#1` / `#2` jump links.
+    delete item.link;
+    return item;
+  });
+  settings.icon_list = newItems;
+  return makeWidget('icon-list', settings);
+}
+
+function buildIconBoxWidget(
+  proto: ElementorElement | null,
+  text: string,
+): ElementorElement {
+  const settings = proto?.settings ? deepClone(proto.settings as Record<string, unknown>) : {};
+  // Avoid duplicated text rendering in themes where icon-box shows both title and description.
+  const hadTitle =
+    typeof settings.title_text === 'string' && settings.title_text.trim().length > 0;
+  settings.description_text = text;
+  settings.title_text = hadTitle ? text : '';
+  return makeWidget('icon-box', settings);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Build the full _elementor_data from blocks + prototypes
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Group consecutive paragraph blocks into one text-editor widget so the editor's
+ * typography wraps a coherent run of body copy (the source uses one text-editor
+ * per section, not per paragraph).
+ */
+function widgetsFromBlocks(blocks: ContentBlock[], protos: WidgetPrototypes): ElementorElement[] {
+  const out: ElementorElement[] = [];
+  let paraBuffer: string[] = [];
+  const flushParas = (): void => {
+    if (!paraBuffer.length) return;
+    const html = paraBuffer.join('\n');
+    out.push(buildTextEditorWidget(protos.textEditor, html));
+    paraBuffer = [];
+  };
+  for (const b of blocks) {
+    if (b.type === 'paragraph') {
+      paraBuffer.push(b.html);
+      continue;
+    }
+    flushParas();
+    if (b.type === 'heading') {
+      const headingProto =
+        protos.headings.get(`h${b.level}`) ??
+        protos.headings.get('h2') ??
+        protos.headings.values().next().value;
+      out.push(buildHeadingWidget(headingProto, b.text, b.level));
+    } else if (b.type === 'list') {
+      if (b.ordered) {
+        // Ordered lists don't map well to icon-list (which is unordered); use a text-editor with `<ol>`
+        // so numbering is preserved instead of being replaced by repeating icons.
+        const olHtml = `<ol>${b.items.map((t) => `<li>${t}</li>`).join('')}</ol>`;
+        out.push(buildTextEditorWidget(protos.textEditor, olHtml));
+      } else {
+        if (protos.iconBox) {
+          for (const item of b.items) out.push(buildIconBoxWidget(protos.iconBox, item));
+        } else {
+          out.push(buildIconListWidget(protos.iconList, b.items));
+        }
+      }
+    }
+  }
+  flushParas();
+  return out;
+}
+
+function isContentWidget(el: ElementorElement): boolean {
+  return (
+    el.elType === 'widget' &&
+    (el.widgetType === 'heading' ||
+      el.widgetType === 'text-editor' ||
+      el.widgetType === 'icon-list' ||
+      el.widgetType === 'icon-box')
+  );
+}
+
+function buildElementorDataByReplacingContentWidgets(
+  sourceData: ElementorElement[],
+  generatedWidgets: ElementorElement[],
+): ElementorElement[] {
+  const queueByType = {
+    heading: generatedWidgets
+      .filter((w) => w.elType === 'widget' && w.widgetType === 'heading')
+      .map((w) => deepClone(w)),
+    'text-editor': generatedWidgets
+      .filter((w) => w.elType === 'widget' && w.widgetType === 'text-editor')
+      .map((w) => deepClone(w)),
+    'icon-list': generatedWidgets
+      .filter((w) => w.elType === 'widget' && w.widgetType === 'icon-list')
+      .map((w) => deepClone(w)),
+    'icon-box': generatedWidgets
+      .filter((w) => w.elType === 'widget' && w.widgetType === 'icon-box')
+      .map((w) => deepClone(w)),
+  };
+
+  const takeNextForWidgetType = (widgetType: string | undefined): ElementorElement | null => {
+    if (!widgetType) return null;
+    if (widgetType === 'heading') return queueByType.heading.shift() ?? null;
+    if (widgetType === 'text-editor') return queueByType['text-editor'].shift() ?? null;
+    if (widgetType === 'icon-list') return queueByType['icon-list'].shift() ?? null;
+    if (widgetType === 'icon-box') return queueByType['icon-box'].shift() ?? null;
+    return null;
+  };
+
+  const extractIconBoxText = (widget: ElementorElement): string | null => {
+    const settings = (widget.settings ?? {}) as Record<string, unknown>;
+    const description = typeof settings.description_text === 'string' ? settings.description_text.trim() : '';
+    if (description) return description;
+    const title = typeof settings.title_text === 'string' ? settings.title_text.trim() : '';
+    if (title) return title;
+    return null;
+  };
+
+  const classifyIconBoxText = (text: string): 'positive' | 'negative' | 'neutral' => {
+    const t = text.toLowerCase();
+    const negativeHints = [
+      'nicht',
+      'kein',
+      'keine',
+      'ohne',
+      'ausgeschlossen',
+      'nicht versichert',
+      'nicht gedeckt',
+      'achtung',
+      'warnung',
+      'verboten',
+      'voraussetzung',
+    ];
+    const positiveHints = [
+      'versichert',
+      'abgedeckt',
+      'gedeckt',
+      'inklusive',
+      'inbegriffen',
+      'leistet',
+      'übernimmt',
+      'schutz',
+      'enthalten',
+    ];
+    if (negativeHints.some((h) => t.includes(h))) return 'negative';
+    if (positiveHints.some((h) => t.includes(h))) return 'positive';
+    return 'neutral';
+  };
+
+  const classifySourceIconBoxSlot = (widget: ElementorElement): 'positive' | 'negative' | 'neutral' => {
+    const settings = (widget.settings ?? {}) as Record<string, unknown>;
+    const iconRaw = settings.icon as unknown;
+    const iconValue =
+      typeof iconRaw === 'string'
+        ? iconRaw
+        : iconRaw && typeof iconRaw === 'object' && typeof (iconRaw as Record<string, unknown>).value === 'string'
+          ? ((iconRaw as Record<string, unknown>).value as string)
+          : '';
+    const i = iconValue.toLowerCase();
+
+    if (
+      i.includes('fa-check') ||
+      i.includes('fa-check-circle') ||
+      i.includes('fa-check-square')
+    ) {
+      return 'positive';
+    }
+    if (
+      i.includes('icon-cross') ||
+      i.includes('fa-times') ||
+      i.includes('fa-xmark') ||
+      i.includes('fa-exclamation') ||
+      i.includes('fa-ban') ||
+      i.includes('fa-warning')
+    ) {
+      return 'negative';
+    }
+    return 'neutral';
+  };
+
+  const iconTextQueues: Record<'positive' | 'negative' | 'neutral', string[]> = {
+    positive: [],
+    negative: [],
+    neutral: [],
+  };
+
+  for (const widget of queueByType['icon-box']) {
+    const text = extractIconBoxText(widget);
+    if (!text) continue;
+    iconTextQueues[classifyIconBoxText(text)].push(text);
+  }
+
+  const takeNextIconBoxTextForSlot = (slotKind: 'positive' | 'negative' | 'neutral'): string | null => {
+    const primary = iconTextQueues[slotKind];
+    if (primary.length) return primary.shift() ?? null;
+    // Never force opposite polarity into colored template slots.
+    // If no same-kind text is available, only neutral spillover is allowed.
+    if (slotKind !== 'neutral' && iconTextQueues.neutral.length) {
+      return iconTextQueues.neutral.shift() ?? null;
+    }
+    if (slotKind === 'neutral') {
+      if (iconTextQueues.positive.length) return iconTextQueues.positive.shift() ?? null;
+      if (iconTextQueues.negative.length) return iconTextQueues.negative.shift() ?? null;
+    }
+    return null;
+  };
+
+  const replaceIconBoxTextOnly = (sourceWidget: ElementorElement): ElementorElement => {
+    const slotKind = classifySourceIconBoxSlot(sourceWidget);
+    const nextText = takeNextIconBoxTextForSlot(slotKind) ?? extractIconBoxText(sourceWidget);
+    if (!nextText) return deepClone(sourceWidget);
+    const cleanText = decodeBasicEntities(stripTags(nextText)).replace(/\s+/g, ' ').trim();
+    if (!cleanText) return deepClone(sourceWidget);
+    const cloned = deepClone(sourceWidget);
+    const settings = (cloned.settings ?? {}) as Record<string, unknown>;
+    const hadTitle = typeof settings.title_text === 'string' && settings.title_text.trim().length > 0;
+    settings.description_text = cleanText;
+    settings.title_text = hadTitle ? cleanText : '';
+    cloned.settings = settings;
+    return cloned;
+  };
+
+  const rewriteNode = (node: ElementorElement): ElementorElement | null => {
+    if (isContentWidget(node)) {
+      if (node.widgetType === 'icon-box') {
+        // Keep icon/color/styling from each original template slot and only replace copy.
+        // This preserves mixed bullet styles (e.g. red warning, blue info, green checks)
+        // while preventing opposite-semantics text from leaking into wrong-colored slots.
+        return replaceIconBoxTextOnly(node);
+      }
+      // Strict template slot binding: only replace with same widget type.
+      // This prevents content from drifting into unrelated template regions.
+      const next = takeNextForWidgetType(node.widgetType);
+      return next ? deepClone(next) : deepClone(node);
+    }
+    const cloned: ElementorElement = {
+      ...deepClone(node),
+      elements: [],
+    };
+    if (Array.isArray(node.elements) && node.elements.length) {
+      const rewrittenChildren = node.elements
+        .map((child) => rewriteNode(child))
+        .filter((child): child is ElementorElement => Boolean(child));
+      cloned.elements = rewrittenChildren;
+    }
+    return cloned;
+  };
+
+  const rebuilt = sourceData
+    .map((node) => rewriteNode(node))
+    .filter((node): node is ElementorElement => Boolean(node));
+
+  // Strict template-preservation mode:
+  // Do not append overflow widgets into the first content host. Appending causes
+  // rewritten content to appear in unintended areas (often near helper/html widgets),
+  // which makes the draft look like the page template wasn't applied.
+  // If rewritten content is longer than available content slots, we keep the source
+  // structure intact and intentionally truncate overflow instead of mutating layout.
+  return rebuilt;
+}
+
+/**
+ * Build a fresh `_elementor_data` tree using the source's widget styling as prototypes
+ * and the new article HTML as content. Source widget content is intentionally discarded
+ * so the old article cannot bleed through; only the *styling* is reused.
+ */
+export function buildElementorDataFromSource(
+  cleanedHtml: string,
+  sourceData: ElementorElement[] | null,
+): ElementorElement[] {
+  const blocks = htmlToContentBlocks(cleanedHtml);
+  const protos: WidgetPrototypes = sourceData
+    ? collectPrototypes(sourceData)
+    : { headings: new Map(), textEditor: null, iconList: null, iconBox: null, outerWrapper: null };
+
+  // If the new HTML has no recognizable blocks (rare), fall back to a single text-editor widget
+  // with the raw cleaned HTML so something useful still renders.
+  const widgets =
+    blocks.length > 0
+      ? widgetsFromBlocks(blocks, protos)
+      : [buildTextEditorWidget(protos.textEditor, cleanedHtml)];
+
+  if (sourceData && sourceData.length) {
+    return buildElementorDataByReplacingContentWidgets(sourceData, widgets);
+  }
+
+  // Wrap in the source's outer container/section if present so width/padding match the original.
+  if (protos.outerWrapper) {
+    const wrapper: ElementorElement = {
+      id: elementorId(),
+      elType: protos.outerWrapper.elType,
+      settings: deepClone(protos.outerWrapper.settings as Record<string, unknown>),
+      elements: [],
+      isInner: false,
+    };
+    if (wrapper.elType === 'section') {
+      // section needs a column child, then widgets inside the column.
+      const column: ElementorElement = {
+        id: elementorId(),
+        elType: 'column',
+        settings: { _column_size: 100, _inline_size: null },
+        elements: widgets,
+        isInner: false,
+      };
+      wrapper.elements = [column];
+    } else {
+      // container (flexbox) holds widgets directly.
+      wrapper.elements = widgets;
+    }
+    return [wrapper];
+  }
+
+  // No outer wrapper available — fall back to the older section/column structure.
+  const column: ElementorElement = {
+    id: elementorId(),
+    elType: 'column',
+    settings: { _column_size: 100, _inline_size: null },
+    elements: widgets,
+    isInner: false,
+  };
+  const section: ElementorElement = {
+    id: elementorId(),
+    elType: 'section',
+    settings: { structure: '10' },
+    elements: [column],
+    isInner: false,
+  };
+  return [section];
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Source post lookup + meta payload
+// ──────────────────────────────────────────────────────────────────────────────
 
 /**
  * `_elementor_data` is registered as REST meta type **string** (serialized editor JSON blob).
@@ -372,77 +910,92 @@ function coerceMetaValueForRest(metaKey: string, v: unknown): unknown {
 
 type ElementorMetaPayloadResult = {
   meta?: Record<string, unknown>;
-  injected: boolean;
+  /** Whether the new draft uses Elementor (i.e. `_elementor_data` is set). */
+  usesElementor: boolean;
 };
 
-/** Copy Elementor post meta from source (REST-shaped). Strip generated CSS/assets; optionally inject HTML into `_elementor_data`. */
+/**
+ * Build Elementor post meta for the new draft.
+ *
+ * Decision: use Elementor if the source did (`_elementor_edit_mode = builder` with non-empty
+ * `_elementor_data`). When yes, build a fresh widget tree from the new content but reuse the
+ * source's widget styling as prototypes (heading typography, icon-list icons, text-editor
+ * fonts, outer container layout). This guarantees the old article cannot render under the
+ * new one *and* preserves the visual identity of the page (checkmarks/circles on lists,
+ * styled headings, branded section width, etc.).
+ *
+ * Generated/cached keys (CSS, screenshots, page assets) are never copied — they are
+ * regenerated by Elementor on first render of the draft.
+ */
 function buildElementorMetaPayload(
   sourceMeta: Record<string, unknown> | undefined,
-  contentHtml: string,
+  cleanedHtml: string,
 ): ElementorMetaPayloadResult {
-  if (!sourceMeta || typeof sourceMeta !== 'object') return { meta: undefined, injected: false };
-  const editMode =
-    typeof sourceMeta._elementor_edit_mode === 'string'
-      ? sourceMeta._elementor_edit_mode
-      : typeof sourceMeta._elementor_edit_mode === 'number'
-        ? String(sourceMeta._elementor_edit_mode)
-        : '';
+  if (!sourceMeta || typeof sourceMeta !== 'object') return { usesElementor: false };
+
   const rawData = sourceMeta._elementor_data;
-  const hasRaw =
+  const sourceHasElementorData =
     rawData !== undefined &&
     rawData !== null &&
-    (typeof rawData === 'string' ? rawData.trim().length > 0 : Array.isArray(rawData) ? rawData.length > 0 : false);
-  const usesElementor = editMode === 'builder' && hasRaw;
-  if (!usesElementor) return { meta: undefined, injected: false };
+    (typeof rawData === 'string'
+      ? rawData.trim().length > 0
+      : Array.isArray(rawData)
+        ? rawData.length > 0
+        : false);
+  // Some installs store `_elementor_data` but omit or vary `_elementor_edit_mode`
+  // (e.g. migrated content, plugin/version differences). Presence of usable
+  // Elementor data is the reliable signal for widget-based reconstruction.
+  const usesElementor = sourceHasElementorData;
+  if (!usesElementor) return { usesElementor: false };
 
   const next: Record<string, unknown> = {};
-  let dataOut: unknown = rawData;
 
-  let htmlForWidget = sanitizeHtmlForElementorSingleWidget(contentHtml);
-  if (htmlForWidget.trim().length < 40 && contentHtml.trim().length > 400) {
-    log.warn(
-      {},
-      'wordpress elementor: sanitizer produced very little text vs source — using raw HTML for inject (layout may need manual trim)',
-    );
-    htmlForWidget = contentHtml.trim();
-  }
-  if (htmlForWidget.length + 400 < contentHtml.length) {
-    log.info(
-      { beforeChars: contentHtml.length, afterChars: htmlForWidget.length },
-      'wordpress elementor: reduced full-page/Elementor chrome before single-widget inject',
-    );
-  }
-  const { injected, data } = injectHtmlIntoElementorDataJson(rawData, htmlForWidget);
-  dataOut = data;
-  if (!injected) {
-    log.info(
-      {},
-      'wordpress elementor: no large text-editor/html widget to replace — copying layout JSON unchanged; rely on post content where applicable',
-    );
-  }
+  // Build a fresh widget tree using the source's widget styling as prototypes.
+  // Source widget *content* is intentionally discarded (so the old article cannot render
+  // below the new one), but the source's heading typography, icon-list icons, text-editor
+  // font settings, and outer container layout are reused — so the new draft looks like
+  // the same Elementor theme.
+  const sourceData = parseElementorData(rawData);
+  const freshData = buildElementorDataFromSource(cleanedHtml, sourceData);
+  next._elementor_data = JSON.stringify(freshData);
+  next._elementor_edit_mode = 'builder';
 
+  // Preserve a small allow-list of structural keys from source so the draft opens
+  // in the same Elementor mode (page vs post) at the same version.
+  const PRESERVE_KEYS = new Set([
+    '_elementor_template_type',
+    '_elementor_version',
+    '_elementor_pro_version',
+    '_wp_page_template',
+  ]);
   for (const [k, v] of Object.entries(sourceMeta)) {
-    if (!k.startsWith('_elementor')) continue;
+    if (!PRESERVE_KEYS.has(k)) continue;
     if (ELEMENTOR_GENERATED_META_KEYS.has(k)) continue;
-    if (k === '_elementor_data') {
-      next[k] = coerceMetaValueForRest('_elementor_data', dataOut);
-      continue;
-    }
     next[k] = coerceMetaValueForRest(k, v);
   }
 
-  next._elementor_edit_mode = 'builder';
+  // Sane defaults if source omitted them.
+  if (!next._elementor_template_type) {
+    next._elementor_template_type = 'wp-post';
+  }
 
-  log.info({ keys: Object.keys(next), injected }, 'wordpress elementor: attaching meta on new draft');
+  log.info(
+    { keys: Object.keys(next), htmlChars: cleanedHtml.length },
+    'wordpress elementor: rebuilt _elementor_data from source widget prototypes',
+  );
 
-  return { meta: next, injected };
+  return { meta: next, usesElementor: true };
 }
 
 async function fetchSourcePostForDuplicate(
   cfg: WpRestConfig,
   restBase: string,
   sourceId: number,
-): Promise<Partial<Pick<PostEdit, 'categories' | 'tags' | 'featured_media'>> & { meta?: Record<string, unknown> }> {
+): Promise<
+  Partial<Pick<PostEdit, 'categories' | 'tags' | 'featured_media' | 'template'>> & {
+    meta?: Record<string, unknown>;
+  }
+> {
   const tryGet = async (query: string): Promise<PostEdit | null> => {
     try {
       const path = query ? `/${restBase}/${sourceId}?${query}` : `/${restBase}/${sourceId}`;
@@ -458,6 +1011,7 @@ async function fetchSourcePostForDuplicate(
         ? (edit.meta as Record<string, unknown>)
         : undefined;
     return {
+      template: edit.template,
       categories: edit.categories,
       tags: edit.tags,
       featured_media: edit.featured_media,
@@ -467,6 +1021,7 @@ async function fetchSourcePostForDuplicate(
   const view = await tryGet('');
   if (view) {
     return {
+      template: view.template,
       categories: view.categories,
       tags: view.tags,
       featured_media: view.featured_media,
@@ -551,8 +1106,11 @@ export type CreateDraftResult = {
 
 /**
  * Create a new unpublished (draft) post or page with the given HTML.
- * If the source was edited with Elementor (`_elementor_edit_mode: builder`), copies Elementor meta from the source
- * and injects rewritten HTML into the largest Text Editor / HTML widget in `_elementor_data` so the draft opens in Elementor.
+ *
+ * For Elementor sources, builds a fresh `_elementor_data` whose widgets reuse the source's
+ * styling prototypes (heading typography, icon-list icons, text-editor font, outer container
+ * layout) but contain the new content — so the draft inherits the page's visual identity
+ * without carrying any of the old article's text.
  */
 export async function createDraftDuplicate(params: {
   cfg: WpRestConfig;
@@ -582,24 +1140,33 @@ export async function createDraftDuplicate(params: {
     };
     log.info({ sourceId: params.wpId }, 'wordpress draft: merged synced rest_meta fallback (live REST had no meta)');
   }
-  if (
-    !dup.categories?.length &&
-    !dup.tags?.length &&
-    !(dup.featured_media && dup.featured_media > 0) &&
-    !dup.meta?.['_elementor_data']
-  ) {
-    log.info({ sourceId: params.wpId, restBase }, 'wordpress draft: source snapshot minimal (taxonomy/elementor missing if no REST access)');
-  }
 
-  const elementor = buildElementorMetaPayload(dup.meta, params.contentHtml);
+  // Sanitize the formatter HTML deterministically before doing anything else.
+  const cleanedHtml = cleanHtmlToSemanticBody(params.contentHtml);
+  if (cleanedHtml.length + 400 < params.contentHtml.length) {
+    log.info(
+      { beforeChars: params.contentHtml.length, afterChars: cleanedHtml.length },
+      'wordpress: stripped Elementor scaffold/styles from formatter HTML before upload',
+    );
+  }
+  if (cleanedHtml.length < 60 && params.contentHtml.trim().length > 200) {
+    log.warn(
+      { beforeChars: params.contentHtml.length, afterChars: cleanedHtml.length },
+      'wordpress: sanitizer produced very little content vs source — falling back to raw HTML',
+    );
+  }
+  const bodyHtml = cleanedHtml.length >= 60 ? cleanedHtml : params.contentHtml.trim();
+
+  const elementor = buildElementorMetaPayload(dup.meta, bodyHtml);
   const elementorMeta = elementor.meta;
 
   const excerpt = `Unpublished rewrite draft — source ${params.wpType} ID ${params.sourceWpId}. Review before publish.`;
 
   const payload: Record<string, unknown> = {
     title: params.newTitle,
-    // Avoid duplicate front-end rendering (Elementor content + post_content) when Elementor injection succeeded.
-    content: elementor.injected ? '' : params.contentHtml,
+    // Always include cleaned HTML in post_content too — Elementor renders its own data,
+    // but this keeps feeds/AMP/non-Elementor fallbacks correct.
+    content: bodyHtml,
     status: 'draft',
     slug: params.draftSlug,
     excerpt,
@@ -607,6 +1174,11 @@ export async function createDraftDuplicate(params: {
 
   if (Array.isArray(dup.categories) && dup.categories.length) {
     payload.categories = dup.categories;
+  }
+  if (typeof dup.template === 'string' && dup.template.trim()) {
+    // Critical for pages using custom templates (e.g. elementor_header_footer).
+    // Missing this can change wrapper classes and section/background rendering.
+    payload.template = dup.template.trim();
   }
   if (Array.isArray(dup.tags) && dup.tags.length) {
     payload.tags = dup.tags;
@@ -669,7 +1241,10 @@ export async function createDraftDuplicate(params: {
   const restLink = typeof created.link === 'string' ? created.link : '';
   const admin = buildAdminEditUrl(params.siteBase, draftId);
 
-  log.info({ draftId, draftSlug, restBase, wpType: params.wpType }, 'wordpress draft created');
+  log.info(
+    { draftId, draftSlug, restBase, wpType: params.wpType, usesElementor: elementor.usesElementor },
+    'wordpress draft created',
+  );
 
   return {
     draftId,

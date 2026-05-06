@@ -281,6 +281,14 @@ ${PUBLICATION_BACKGROUND_FOR_PROMPTS}
 - **Internal links**: If **interlink_hints** lists URLs slugs or Markdown link lines, weave in **at least 4** contextual \`[anchor](absolute-url)\` links to relevant related pages—not a footer blob; scatter in body sections where they aid navigation. Omit a suggested URL only if it is genuinely off-topic.
 - If hints are sparse, infer 2–4 internal links using the same site's path style as in **SOURCE HTML** (match domain + slug paths from existing anchors in source).
 
+## Template-aware list writing (critical for Elementor rendering)
+- When source sections contain icon bullets, keep list intent explicit in Markdown: use short lead sentence/line, then a real bullet list (one point per line), not a merged prose paragraph.
+- Preserve semantic tone per section: warning/problem sections should read like risks, benefit/performance sections like positives, add-on/legal sections like supplementary points.
+- Keep bullet items concise and parallel so they map cleanly into existing Elementor icon-box slots with their original icon/color styling.
+- Preserve source section order and heading intent; do not move "covered" items into exclusion/warning sections or move exclusions into benefits sections.
+- Do not invert polarity: "nicht versichert / ausgeschlossen / Voraussetzung" must stay negative wording, while covered benefits remain positive wording.
+- Prefer refining existing points over adding many new bullets; only add bullets when truly necessary and in the same section intent.
+
 ## Hard rules (anti-hallucination)
 - Do **not** add **new** concrete numbers (€, precise claim limits, case numbers) unless they are already in the **source HTML**.
 - Do **not** present web-research snippets as the broker’s personal policy terms unless the source article already does.
