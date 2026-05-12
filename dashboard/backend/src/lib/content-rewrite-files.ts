@@ -1,5 +1,5 @@
 /**
- * On-disk storage for rewritten HTML + JSON staging index (no rewrite queue in SQLite).
+ * On-disk storage for rewrite artifacts + JSON staging index (no rewrite queue in SQLite).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,7 +18,11 @@ export type RewriteStagingItem = {
   status: 'rewritten' | 'done' | 'failed';
   rewritten_title: string | null;
   draft_slug: string | null;
-  html_rel_path: string | null;
+  /** Preferred artifact path for new staging items. Legacy items may only have `html_rel_path`. */
+  output_rel_path?: string | null;
+  output_format?: 'markdown' | 'html';
+  /** @deprecated Legacy HTML artifact path. */
+  html_rel_path?: string | null;
   research_notes: string | null;
   diagnosis_json: string | null;
   /** JSON trace of multi-agent rounds (reviewer scores, approve flag), for operators only. */
@@ -83,8 +87,8 @@ export function getStagingItemById(cfg: AppConfig, id: string): RewriteStagingIt
   return readStagingIndex(cfg).find((x) => x.id === id);
 }
 
-/** Best-effort delete of stored HTML; ignores missing file. */
-export function deleteRewriteHtmlFile(cfg: AppConfig, relativePath: string): void {
+/** Best-effort delete of stored artifact; ignores missing file. */
+export function deleteRewriteOutputFile(cfg: AppConfig, relativePath: string): void {
   const trimmed = relativePath.trim().replace(/\\/g, '/');
   if (!trimmed || trimmed.includes('..')) {
     throw new Error('Invalid rewrite file path');
@@ -114,15 +118,28 @@ export function removeStagingItemById(cfg: AppConfig, id: string): boolean {
   if (idx === -1) return false;
   const [removed] = items.splice(idx, 1);
   writeStagingIndex(cfg, items);
-  const rel = removed.html_rel_path?.trim();
-  if (rel) {
+  const paths = [removed.output_rel_path?.trim(), removed.html_rel_path?.trim()].filter(
+    (rel): rel is string => Boolean(rel),
+  );
+  for (const rel of new Set(paths)) {
     try {
-      deleteRewriteHtmlFile(cfg, rel);
+      deleteRewriteOutputFile(cfg, rel);
     } catch {
       /* ignore */
     }
   }
   return true;
+}
+
+/** Write UTF-8 Markdown under `staging/{id}.md`; returns relative POSIX path. */
+export function writeStagingMarkdownFile(cfg: AppConfig, stagingId: string, markdown: string): string {
+  const rel = `${STAGING_DIR}/${stagingId}.md`;
+  const root = rewriteRootAbs(cfg);
+  const abs = path.resolve(root, ...rel.split('/'));
+  assertUnderRoot(root, abs);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, markdown, 'utf8');
+  return rel.replace(/\\/g, '/');
 }
 
 /** Write UTF-8 HTML under `staging/{id}.html`; returns relative POSIX path. */
@@ -136,7 +153,7 @@ export function writeStagingHtmlFile(cfg: AppConfig, stagingId: string, html: st
   return rel.replace(/\\/g, '/');
 }
 
-export function readRewriteHtmlFromPath(cfg: AppConfig, relativePath: string): string {
+export function readRewriteOutputFromPath(cfg: AppConfig, relativePath: string): string {
   const trimmed = relativePath.trim().replace(/\\/g, '/');
   if (!trimmed || trimmed.includes('..')) {
     throw new Error('Invalid rewrite file path');
@@ -152,15 +169,15 @@ export function relativeRewriteHtmlPath(runId: number, itemId: number): string {
   return `${runId}/${itemId}.html`;
 }
 
-/** Load HTML from disk path or legacy inline blob field. */
-export function loadStoredRewrittenHtml(
+/** Load a rewrite artifact from disk path or legacy inline blob field. */
+export function loadStoredRewriteOutput(
   cfg: AppConfig,
-  row: { rewritten_html_path: string | null; rewritten_html: string | null },
+  row: { rewritten_output_path?: string | null; rewritten_html_path?: string | null; rewritten_html?: string | null },
 ): string {
-  const p = row.rewritten_html_path?.trim();
+  const p = (row.rewritten_output_path ?? row.rewritten_html_path ?? null)?.trim();
   if (p) {
     try {
-      return readRewriteHtmlFromPath(cfg, p);
+      return readRewriteOutputFromPath(cfg, p);
     } catch {
       return '';
     }

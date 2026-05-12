@@ -72,6 +72,7 @@ export function createBlogSeoRouter(cfg: AppConfig, _seo: Database.Database): Ho
             failCount: Object.values(checks).filter((x) => x?.status === 'FAIL').length,
             summary: (typeof raw.summary === 'string' ? raw.summary : null) as string | null,
             checks,
+            rewriteImpact: raw.rewrite_impact ?? null,
             model: (typeof raw.model === 'string' ? raw.model : null) as string | null,
             synthetic: Boolean(raw._synthetic),
           };

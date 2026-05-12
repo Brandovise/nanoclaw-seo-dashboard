@@ -1,6 +1,6 @@
 /**
  * Content rewrite pipeline: low SEO-score articles → Anthropic web-search research → diagnosis
- * → Markdown writer ↔ reviewer → one-shot MD→HTML; WordPress draft is a separate user-triggered upload.
+ * → Markdown writer ↔ reviewer → Markdown staging, with optional basic HTML conversion + full SEO audit.
  */
 import fs from 'node:fs';
 import Database from 'better-sqlite3';
@@ -14,18 +14,24 @@ import type { RewriteStagingItem } from './content-rewrite-files.js';
 import {
   clearRewriteStagingDir,
   getStagingItemById,
-  loadStoredRewrittenHtml,
+  loadStoredRewriteOutput,
   newRewriteStagingId,
   readStagingIndex,
   removeStagingItemById,
   upsertStagingItem,
   writeStagingHtmlFile,
+  writeStagingMarkdownFile,
 } from './content-rewrite-files.js';
 import { createDraftDuplicate, loadWpRestConfig } from './wordpress-write.js';
 import { sqlWpTypesDashboardClause } from './wp-dashboard-types.js';
 import { log } from './logger.js';
 import { hasTable } from './nanoclaw-db.js';
-import { runOrchestratedArticleRewrite } from './content-rewrite-agents.js';
+import {
+  runOrchestratedArticleRewrite,
+  runSeoHtmlConversionAgent,
+  type RewriteAcceptanceThresholds,
+} from './content-rewrite-agents.js';
+import { auditSeoContent } from './seo-audit.js';
 
 type CandidateRow = {
   slug: string;
@@ -43,6 +49,8 @@ type CandidateRow = {
 };
 
 const MAX_REWRITE_PROGRESS_LOG = 400;
+
+const DEFAULT_ACCEPTANCE_THRESHOLDS: RewriteAcceptanceThresholds = { hr: 4, seo: 85, geo: 85 };
 
 /** One line of pipeline / agent activity for the dashboard (API + UI). */
 export type RewriteProgressEntry = {
@@ -63,7 +71,7 @@ const rewriteState: {
   lastThreshold: number | null;
   lastLimit: number | null;
   lastDryRun: boolean;
-  /** Current agent / step id: orchestrator | research | diagnosis | writer | reviewer | persist | idle */
+  /** Current agent / step id: orchestrator | research | diagnosis | writer | reviewer | html | full-seo-audit | persist | idle */
   stage: string;
   stageDetail: string | null;
   progressLog: RewriteProgressEntry[];
@@ -111,6 +119,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
 function siteBase(cfg: AppConfig): string {
   return (cfg.WP_SITE_URL || process.env.WP_SITE_URL || '').replace(/\/+$/, '');
 }
@@ -143,7 +157,7 @@ function formatInterlinkHints(slug: string, map: Record<string, IlSuggestion>): 
   const ins = s.inbound?.length ? s.inbound.slice(0, 5) : [];
   const outs = s.outbound?.length ? s.outbound.slice(0, 8) : [];
   if (!ins.length && !outs.length) return '';
-  const lines: string[] = ['Interlinking suggestions (use where natural; keep HTML structure):'];
+  const lines: string[] = ['Interlinking suggestions (use where natural; keep Markdown structure clean):'];
   for (const o of outs) {
     lines.push(`- Link to /${o.target_slug}/ anchor: "${o.anchor_text}" — ${o.placement_hint || ''}`);
   }
@@ -322,6 +336,8 @@ function stagingItemBase(
     status: 'failed',
     rewritten_title: null,
     draft_slug: null,
+    output_rel_path: null,
+    output_format: undefined,
     html_rel_path: null,
     research_notes: null,
     diagnosis_json: null,
@@ -342,6 +358,8 @@ async function processOneItem(
   candidate: CandidateRow,
   dryRun: boolean,
   ilMap: Record<string, IlSuggestion>,
+  acceptanceThresholds: RewriteAcceptanceThresholds,
+  convertToHtml: boolean,
 ): Promise<void> {
   const stagingId = newRewriteStagingId();
   const slug = candidate.slug;
@@ -409,7 +427,7 @@ async function processOneItem(
       formatInterlinkHints(slug, hintsForSlug),
       buildInternalLinkHintsFromWpDb(db, slug),
     );
-    const { html: newHtml, researchNotes: research, diagnosisJson, trace } = await runOrchestratedArticleRewrite(cfg, {
+    const { markdown, researchNotes: research, diagnosisJson, trace } = await runOrchestratedArticleRewrite(cfg, {
       slug,
       title,
       excerpt,
@@ -419,22 +437,74 @@ async function processOneItem(
       checksJson,
       originalHtml: html.content_html || '',
       interlinkHints: interHints,
+      acceptanceThresholds,
       onProgress: (ev) => {
         pushRewriteProgress({ stage: ev.stage, message: ev.message, slug });
       },
     });
 
+    let output = markdown;
+    let outputFormat: 'markdown' | 'html' = 'markdown';
+    let htmlRelPath: string | null = null;
+    if (convertToHtml && trace.final_approved) {
+      pushRewriteProgress({
+        stage: 'html',
+        message: 'HTML writer: converting accepted Markdown with SEO/reviewer context…',
+        slug,
+      });
+      const htmlOutput = await runSeoHtmlConversionAgent(cfg, {
+        slug,
+        title,
+        markdown,
+        auditSummary: summary,
+        failNotes,
+        checksJson,
+        trace,
+      });
+      pushRewriteProgress({
+        stage: 'full-seo-audit',
+        message: 'Full SEO/GEO audit only: generated HTML…',
+        slug,
+      });
+      const htmlAudit = await auditSeoContent(cfg, {
+        slug,
+        title,
+        bodyText: htmlOutput,
+      });
+      trace.final_html_audit = htmlAudit;
+      output = htmlOutput;
+      outputFormat = 'html';
+      pushRewriteProgress({
+        stage: 'full-seo-audit',
+        message: `Full SEO/GEO audit only: HTML SEO ${htmlAudit.seo_score}/100, GEO ${htmlAudit.geo_score}/100`,
+        slug,
+      });
+    } else if (convertToHtml && !trace.final_approved) {
+      pushRewriteProgress({
+        stage: 'html',
+        message: 'Skipped HTML conversion because Markdown did not pass acceptance gates',
+        slug,
+      });
+    }
+
     const fin = new Date().toISOString();
     const newSlug = rewrittenDraftSlug(slug);
     const draftTitle = rewrittenDraftTitle(title);
-    const relPath = writeStagingHtmlFile(cfg, stagingId, newHtml);
+    const relPath =
+      outputFormat === 'html'
+        ? writeStagingHtmlFile(cfg, stagingId, output)
+        : writeStagingMarkdownFile(cfg, stagingId, output);
+    if (outputFormat === 'html') htmlRelPath = relPath;
     pushRewriteProgress({
       stage: 'persist',
-      message: !trace.final_approved
-        ? 'Saved rewritten HTML to staging (last draft — human QA recommended)'
-        : trace.soft_approved
-          ? 'Saved rewritten HTML to staging (passed review score gates; meta/schema still in WP)'
-          : 'Saved rewritten HTML to staging (reviewer approved)',
+      message:
+        outputFormat === 'html'
+          ? 'Saved generated HTML to staging after Markdown approval and full SEO/GEO audit'
+          : !trace.final_approved
+            ? 'Saved rewritten Markdown to staging (last draft — human QA recommended)'
+            : trace.soft_approved
+              ? 'Saved rewritten Markdown to staging (passed review score gates; meta/schema still in WP)'
+              : 'Saved rewritten Markdown to staging (reviewer approved)',
       slug,
     });
     upsertStagingItem(
@@ -443,7 +513,9 @@ async function processOneItem(
         status: 'rewritten',
         rewritten_title: draftTitle,
         draft_slug: newSlug,
-        html_rel_path: relPath,
+        output_rel_path: relPath,
+        output_format: outputFormat,
+        html_rel_path: htmlRelPath,
         research_notes: research,
         diagnosis_json: diagnosisJson,
         orchestrator_trace_json: JSON.stringify(trace),
@@ -467,7 +539,13 @@ async function processOneItem(
   }
 }
 
-async function runLoop(cfg: AppConfig, candidates: CandidateRow[], dryRun: boolean): Promise<void> {
+async function runLoop(
+  cfg: AppConfig,
+  candidates: CandidateRow[],
+  dryRun: boolean,
+  acceptanceThresholds: RewriteAcceptanceThresholds,
+  convertToHtml: boolean,
+): Promise<void> {
   const ilMap = readInterlinkMap(cfg);
   if (!fs.existsSync(cfg.DASHBOARD_SQLITE_PATH)) {
     rewriteState.message = 'Dashboard SQLite not found';
@@ -496,7 +574,7 @@ async function runLoop(cfg: AppConfig, candidates: CandidateRow[], dryRun: boole
         message: `Article ${rewriteState.processed + 1}/${rewriteState.total} — agents running`,
         slug: c.slug,
       });
-      await processOneItem(cfg, db, c, dryRun, ilMap);
+      await processOneItem(cfg, db, c, dryRun, ilMap, acceptanceThresholds, convertToHtml);
       rewriteState.processed += 1;
       if (rewriteState.stopRequested) {
         stoppedEarly = true;
@@ -596,6 +674,10 @@ export function startContentRewritePipelineJob(
     threshold?: number;
     limit?: number;
     dryRun?: boolean;
+    acceptanceHr?: number;
+    acceptanceSeo?: number;
+    acceptanceGeo?: number;
+    convertToHtml?: boolean;
   },
 ): { started: boolean; message: string } {
   if (rewriteJob || rewriteState.running) {
@@ -607,6 +689,12 @@ export function startContentRewritePipelineJob(
   const threshold = opts.threshold ?? cfg.REWRITE_SEO_THRESHOLD;
   const limit = Math.max(1, Math.min(100, opts.limit ?? 10));
   const dryRun = opts.dryRun === true;
+  const convertToHtml = opts.convertToHtml === true;
+  const acceptanceThresholds: RewriteAcceptanceThresholds = {
+    hr: clampNumber(opts.acceptanceHr, DEFAULT_ACCEPTANCE_THRESHOLDS.hr, 1, 5),
+    seo: clampNumber(opts.acceptanceSeo, DEFAULT_ACCEPTANCE_THRESHOLDS.seo, 0, 100),
+    geo: clampNumber(opts.acceptanceGeo, DEFAULT_ACCEPTANCE_THRESHOLDS.geo, 0, 100),
+  };
 
   if (!fs.existsSync(cfg.DASHBOARD_SQLITE_PATH)) {
     return { started: false, message: 'Dashboard SQLite not found.' };
@@ -647,15 +735,15 @@ export function startContentRewritePipelineJob(
   rewriteState.stageDetail = 'Starting…';
   pushRewriteProgress({
     stage: 'orchestrator',
-    message: `Run started — ${candidates.length} article(s), threshold ≤${threshold}${dryRun ? ', dry run' : ''}`,
+    message: `Run started — ${candidates.length} article(s), threshold ≤${threshold}; acceptance HR≥${acceptanceThresholds.hr}, SEO≥${acceptanceThresholds.seo}, GEO≥${acceptanceThresholds.geo}${convertToHtml ? '; HTML conversion + full audit enabled' : ''}${dryRun ? ', dry run' : ''}`,
   });
 
-  rewriteJob = runLoop(cfg, candidates, dryRun);
+  rewriteJob = runLoop(cfg, candidates, dryRun, acceptanceThresholds, convertToHtml);
 
   const stagingHint = cfg.resolvedRewriteFilesDir.replace(cfg.repoRoot, '') || cfg.resolvedRewriteFilesDir;
   return {
     started: true,
-    message: `Started rewrite of ${candidates.length} article(s) (threshold ≤${threshold}). Staging: ${stagingHint}`,
+    message: `Started rewrite of ${candidates.length} article(s) (threshold ≤${threshold}; acceptance HR≥${acceptanceThresholds.hr}, SEO≥${acceptanceThresholds.seo}, GEO≥${acceptanceThresholds.geo}${convertToHtml ? '; HTML conversion + full audit enabled' : ''}). Staging: ${stagingHint}`,
   };
 }
 
@@ -668,20 +756,91 @@ export type RewriteItemPreview = {
   rewrittenTitle: string | null;
   draftSlug: string | null;
   rewrittenAt: string | null;
+  outputFormat: 'markdown' | 'html';
+  rewriteOutputPath: string | null;
+  /** @deprecated Legacy HTML path retained for old staged items. */
   rewriteHtmlPath: string | null;
+  rewrittenMarkdown: string;
+  /** @deprecated Legacy alias retained for old frontend callers. */
   rewrittenHtml: string;
   researchNotes: string | null;
   diagnosisJson: string | null;
+  reviewScores: RewriteReviewScores;
   dryRun: boolean;
 };
+
+type RewriteReviewScores = {
+  humanReadable: number | null;
+  seo: number | null;
+  geo: number | null;
+  approved: boolean | null;
+  softApproved: boolean | null;
+};
+
+function outputFormatForItem(row: RewriteStagingItem): 'markdown' | 'html' {
+  if (row.output_format === 'markdown' || row.output_format === 'html') return row.output_format;
+  const p = (row.output_rel_path || row.html_rel_path || '').toLowerCase();
+  return p.endsWith('.md') ? 'markdown' : 'html';
+}
+
+function outputPathForItem(row: RewriteStagingItem): string | null {
+  return row.output_rel_path?.trim() || row.html_rel_path?.trim() || null;
+}
+
+function reviewScoresFromTrace(traceJson: string | null | undefined): RewriteReviewScores {
+  const empty: RewriteReviewScores = { humanReadable: null, seo: null, geo: null, approved: null, softApproved: null };
+  if (!traceJson?.trim()) return empty;
+  try {
+    const trace = JSON.parse(traceJson) as {
+      final_approved?: boolean;
+      soft_approved?: boolean;
+      final_html_audit?: { seo_score?: unknown; geo_score?: unknown };
+      rounds?: Array<{
+        reviewer?: {
+          human_readable?: { score?: unknown };
+          seo?: { score?: unknown };
+          geo?: { score?: unknown };
+        };
+        rewrite_audit?: { seo_score?: unknown; geo_score?: unknown };
+      }>;
+    };
+    const last = Array.isArray(trace.rounds) ? trace.rounds[trace.rounds.length - 1]?.reviewer : undefined;
+    const lastAudit = Array.isArray(trace.rounds) ? trace.rounds[trace.rounds.length - 1]?.rewrite_audit : undefined;
+    const finalHtmlAudit = trace.final_html_audit;
+    return {
+      humanReadable: last?.human_readable?.score == null ? null : Number(last.human_readable.score),
+      seo:
+        finalHtmlAudit?.seo_score != null
+          ? Number(finalHtmlAudit.seo_score)
+          : lastAudit?.seo_score == null
+          ? last?.seo?.score == null
+            ? null
+            : Number(last.seo.score)
+          : Number(lastAudit.seo_score),
+      geo:
+        finalHtmlAudit?.geo_score != null
+          ? Number(finalHtmlAudit.geo_score)
+          : lastAudit?.geo_score == null
+          ? last?.geo?.score == null
+            ? null
+            : Number(last.geo.score)
+          : Number(lastAudit.geo_score),
+      approved: typeof trace.final_approved === 'boolean' ? trace.final_approved : null,
+      softApproved: typeof trace.soft_approved === 'boolean' ? trace.soft_approved : null,
+    };
+  } catch {
+    return empty;
+  }
+}
 
 export function getRewriteItemPreview(cfg: AppConfig, itemId: string): RewriteItemPreview | null {
   const row = getStagingItemById(cfg, itemId);
   if (!row || row.status !== 'rewritten') return null;
-  const htmlPath = row.html_rel_path?.trim();
-  if (!htmlPath) return null;
-  const html = loadStoredRewrittenHtml(cfg, { rewritten_html_path: htmlPath, rewritten_html: null });
-  if (!html.trim()) return null;
+  const outputPath = outputPathForItem(row);
+  if (!outputPath) return null;
+  const output = loadStoredRewriteOutput(cfg, { rewritten_output_path: outputPath, rewritten_html: null });
+  if (!output.trim()) return null;
+  const format = outputFormatForItem(row);
   return {
     id: row.id,
     runId: 0,
@@ -691,10 +850,14 @@ export function getRewriteItemPreview(cfg: AppConfig, itemId: string): RewriteIt
     rewrittenTitle: row.rewritten_title,
     draftSlug: row.draft_slug,
     rewrittenAt: row.rewritten_at,
-    rewriteHtmlPath: htmlPath,
-    rewrittenHtml: html,
+    outputFormat: format,
+    rewriteOutputPath: outputPath,
+    rewriteHtmlPath: row.html_rel_path?.trim() || null,
+    rewrittenMarkdown: format === 'markdown' ? output : '',
+    rewrittenHtml: format === 'html' ? output : output,
     researchNotes: row.research_notes,
     diagnosisJson: row.diagnosis_json,
+    reviewScores: reviewScoresFromTrace(row.orchestrator_trace_json),
     dryRun: row.dry_run,
   };
 }
@@ -707,8 +870,15 @@ export async function uploadRewriteItemToWordpress(
   if (!row) return { ok: false, message: 'Item not found.' };
   if (row.status !== 'rewritten') return { ok: false, message: 'Item is not awaiting upload (rewrite it first).' };
   if (row.dry_run) return { ok: false, message: 'This run was started as dry-run; uploads are disabled.' };
-  const html = loadStoredRewrittenHtml(cfg, {
-    rewritten_html_path: row.html_rel_path,
+  const outputFormat = outputFormatForItem(row);
+  if (outputFormat === 'markdown') {
+    return {
+      ok: false,
+      message: 'This rewrite is stored as Markdown. Re-run with "HTML + full audit" enabled before uploading.',
+    };
+  }
+  const html = loadStoredRewriteOutput(cfg, {
+    rewritten_output_path: outputPathForItem(row),
     rewritten_html: null,
   }).trim();
   if (!html) return { ok: false, message: 'No rewritten HTML on disk.' };
@@ -790,7 +960,7 @@ export async function uploadRewriteItemToWordpress(
   }
 }
 
-/** Remove a staging entry and its HTML file. Does not delete anything in WordPress. */
+/** Remove a staging entry and its artifact file. Does not delete anything in WordPress. */
 export function deleteRewriteQueueItem(cfg: AppConfig, itemId: string): { ok: boolean; message: string } {
   if (rewriteState.running) {
     return { ok: false, message: 'Wait for the pipeline to finish before removing staging entries.' };
@@ -812,7 +982,10 @@ export type RewriteQueueApiResponse = {
     rewrittenTitle: string | null;
     sourceUrl: string | null;
     rewrittenAt: string | null;
+    outputFormat: 'markdown' | 'html';
+    rewriteOutputPath: string | null;
     rewriteHtmlPath: string | null;
+    reviewScores: RewriteReviewScores;
     uploadBlocked: boolean;
   }>;
   doneItems: Array<{
@@ -869,6 +1042,7 @@ export function getRewriteQueueApiPayload(cfg: AppConfig): RewriteQueueApiRespon
 
   for (const it of staging) {
     if (it.status === 'rewritten') {
+      const outputFormat = outputFormatForItem(it);
       rewrittenItems.push({
         itemId: it.id,
         slug: it.slug,
@@ -876,8 +1050,11 @@ export function getRewriteQueueApiPayload(cfg: AppConfig): RewriteQueueApiRespon
         rewrittenTitle: it.rewritten_title,
         sourceUrl: it.source_url,
         rewrittenAt: it.rewritten_at,
-        rewriteHtmlPath: it.html_rel_path,
-        uploadBlocked: it.dry_run,
+        outputFormat,
+        rewriteOutputPath: outputPathForItem(it),
+        rewriteHtmlPath: it.html_rel_path ?? null,
+        reviewScores: reviewScoresFromTrace(it.orchestrator_trace_json),
+        uploadBlocked: it.dry_run || outputFormat === 'markdown',
       });
     } else if (it.status === 'done') {
       done.push(it.slug);

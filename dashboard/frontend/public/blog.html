@@ -295,12 +295,19 @@
   <!-- Blog Rewrite Queue Section -->
   <div id="section-blog-queue" class="section p-6">
     <h1 class="text-xl font-bold text-slate-100 mb-2">Rewrite Queue</h1>
-    <p class="text-sm text-slate-500 mb-4 max-w-4xl">Articles below the SEO threshold are <strong class="text-slate-400">rewritten locally</strong> (research + planning + Markdown writer ↔ reviewer + MD→HTML). Review each result, then use <strong class="text-slate-400">Upload to WordPress</strong> when satisfied to create a duplicate <strong class="text-slate-400">draft</strong> (live post unchanged). <strong class="text-slate-400">Stop</strong> skips the rest of the batch after the current article. <strong class="text-slate-400">Clear staging</strong> removes all local rewritten files and the staging index (and drops legacy rewrite tables in SQLite if present); it does not delete anything in WordPress. Requires <code class="text-slate-400 bg-slate-900 px-1 rounded text-xs">ANTHROPIC_API_KEY</code> (web search enabled for your org), WordPress credentials for upload, and write token for runs/upload.</p>
+    <p class="text-sm text-slate-500 mb-4 max-w-4xl">Articles below the SEO threshold are <strong class="text-slate-400">rewritten locally</strong> (research + planning + Markdown writer ↔ reviewer) and saved as <strong class="text-slate-400">Markdown</strong>. Optionally, once Markdown passes acceptance, the pipeline can convert it into basic SEO HTML and run a full-page SEO/GEO audit. <strong class="text-slate-400">Stop</strong> skips the rest of the batch after the current article. <strong class="text-slate-400">Clear staging</strong> removes all local rewritten files and the staging index (and drops legacy rewrite tables in SQLite if present); it does not delete anything in WordPress. Requires <code class="text-slate-400 bg-slate-900 px-1 rounded text-xs">ANTHROPIC_API_KEY</code> (web search enabled for your org) and write token for runs.</p>
     <div class="card p-3 mb-4 flex flex-wrap items-center gap-3">
       <label class="text-xs text-slate-400">SEO max (candidates below)</label>
       <input type="number" id="rq-threshold" class="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-200" value="65" min="0" max="100" title="Articles with seo_score below this are candidates">
       <label class="text-xs text-slate-400">Max articles</label>
       <input type="number" id="rq-limit" class="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-200" value="5" min="1" max="100">
+      <label class="text-xs text-slate-400">Accept HR ≥</label>
+      <input type="number" id="rq-accept-hr" class="w-14 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-200" value="4" min="1" max="5" step="0.5">
+      <label class="text-xs text-slate-400">SEO ≥</label>
+      <input type="number" id="rq-accept-seo" class="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-200" value="85" min="0" max="100">
+      <label class="text-xs text-slate-400">GEO ≥</label>
+      <input type="number" id="rq-accept-geo" class="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-200" value="85" min="0" max="100">
+      <label class="flex items-center gap-1 text-xs text-slate-400"><input type="checkbox" id="rq-convert-html"> After MD approval: HTML + full audit</label>
       <label class="flex items-center gap-1 text-xs text-slate-400"><input type="checkbox" id="rq-dry-run"> Dry run (rewrite only; upload disabled)</label>
       <button type="button" class="btn btn-primary btn-sm" id="rq-run-btn" onclick="runRewritePipeline()">Start pipeline</button>
       <button type="button" class="btn btn-sm border border-slate-600 text-slate-200" id="rq-stop-btn" onclick="stopRewritePipeline()" disabled>Stop</button>
@@ -321,7 +328,7 @@
       <div class="flex justify-between items-start gap-2 mb-2">
         <div>
           <div class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Live activity</div>
-          <p class="text-xs text-slate-500 mt-1 m-0 max-w-3xl">Transparent log: research → planning → <strong class="text-slate-400">Markdown</strong> writer ↔ reviewer → one-shot <strong class="text-slate-400">MD→HTML</strong> → save. Polls every few seconds while a run is active.</p>
+          <p class="text-xs text-slate-500 mt-1 m-0 max-w-3xl">Transparent log: research → planning → <strong class="text-slate-400">Markdown</strong> writer ↔ reviewer → optional HTML conversion + full audit → save artifact. Polls every few seconds while a run is active.</p>
         </div>
         <span class="text-xs font-mono text-indigo-300 max-w-[55%] text-right truncate shrink-0" id="rq-current-stage" title="">—</span>
       </div>
@@ -334,8 +341,8 @@
         <div id="rq-pending" style="max-height:280px;overflow-y:auto">Loading…</div>
       </div>
       <div class="card border-amber-500/20">
-        <h2 class="text-sm font-semibold text-amber-400/90 mb-4 uppercase tracking-wider">Ready for WordPress (<span id="rq-ready-count">0</span>)</h2>
-        <p class="text-xs text-slate-500 mb-2">Review HTML, then upload to create a draft.</p>
+        <h2 class="text-sm font-semibold text-amber-400/90 mb-4 uppercase tracking-wider">Ready (<span id="rq-ready-count">0</span>)</h2>
+        <p class="text-xs text-slate-500 mb-2">Review Markdown or generated HTML output. Upload is available only for HTML artifacts.</p>
         <div id="rq-ready" style="max-height:280px;overflow-y:auto">—</div>
       </div>
       <div class="card">
@@ -356,8 +363,9 @@
         <div class="overflow-y-auto flex-1 px-4 py-3 space-y-3">
           <details class="text-xs"><summary class="cursor-pointer text-slate-400">Research notes</summary><pre id="rq-preview-research" class="mt-2 p-2 bg-slate-950 rounded text-slate-300 whitespace-pre-wrap max-h-40 overflow-auto"></pre></details>
           <details class="text-xs"><summary class="cursor-pointer text-slate-400">Diagnosis (JSON)</summary><pre id="rq-preview-diagnosis" class="mt-2 p-2 bg-slate-950 rounded text-slate-300 whitespace-pre-wrap max-h-40 overflow-auto"></pre></details>
-          <div class="text-xs text-slate-500">Rendered (approximate)</div>
-          <iframe id="rq-preview-iframe" class="w-full min-h-[45vh] bg-white rounded border border-slate-700" sandbox="allow-same-origin"></iframe>
+          <div class="text-xs text-slate-500" id="rq-preview-render-label">Rendered Markdown</div>
+          <div id="rq-preview-rendered" class="w-full min-h-[45vh] max-h-[60vh] overflow-auto rounded border border-slate-700 bg-slate-950 p-5 text-sm text-slate-200 leading-relaxed"></div>
+          <details class="text-xs"><summary class="cursor-pointer text-slate-400" id="rq-preview-raw-label">Raw Markdown</summary><pre id="rq-preview-output" class="mt-2 p-2 bg-slate-950 rounded text-slate-300 whitespace-pre-wrap max-h-60 overflow-auto"></pre></details>
         </div>
       </div>
     </dialog>
@@ -621,7 +629,7 @@
         </div>
         <div class="bg-slate-900 rounded p-3">
           <div class="font-semibold text-slate-300 mb-1">📋 Audit Checks</div>
-          <div class="text-slate-500">22 checks per article<br>SEO + GEO + E-E-A-T<br>Target score: 70/100</div>
+          <div class="text-slate-500">22 checks per article<br>SEO + GEO + E-E-A-T<br>Target score: 85/100</div>
         </div>
         <div class="bg-slate-900 rounded p-3">
           <div class="font-semibold text-slate-300 mb-1">⏱ Schedule</div>
@@ -1592,6 +1600,85 @@ function formatAuditCheckLabel(id) {
   return id.split('_').map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : '')).join(' ');
 }
 
+function scoreColorClass(score) {
+  return score >= 85 ? 'text-green-400' : score >= 60 ? 'text-yellow-400' : 'text-red-400';
+}
+
+function scoreBarClass(score) {
+  return score >= 85 ? 'bg-green-500' : score >= 60 ? 'bg-yellow-500' : 'bg-red-500';
+}
+
+function fmtSignedDelta(n) {
+  const v = Number(n) || 0;
+  return (v >= 0 ? '+' : '') + v;
+}
+
+function renderAuditScoreCell(prevScore, updatedScore) {
+  const prev = Number(prevScore) || 0;
+  const hasUpdated = updatedScore != null && !Number.isNaN(Number(updatedScore));
+  const next = hasUpdated ? Number(updatedScore) : prev;
+  const delta = next - prev;
+  return `<div class="flex items-center gap-2">
+    <div class="w-16 bg-slate-900 rounded-full h-1.5">
+      <div class="h-1.5 rounded-full ${scoreBarClass(next)}" style="width:${Math.max(0, Math.min(100, next))}%"></div>
+    </div>
+    <span class="text-xs font-semibold ${scoreColorClass(next)}">${hasUpdated ? `${prev}→${next}` : prev}</span>
+    ${hasUpdated ? `<span class="text-[10px] ${delta >= 0 ? 'text-green-400' : 'text-red-400'}">${fmtSignedDelta(delta)}</span>` : ''}
+  </div>`;
+}
+
+function statusPill(status) {
+  const s = String(status || '').toUpperCase();
+  const cls = s === 'PASS' ? 'bg-emerald-950/70 text-emerald-300' : s === 'FAIL' ? 'bg-red-950/70 text-red-300' : 'bg-slate-800 text-slate-400';
+  return `<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls}">${escHtml(s || '—')}</span>`;
+}
+
+function activeRewriteAuditSnapshot(impact) {
+  if (!impact) return null;
+  if (impact.html) return impact.html;
+  if (impact.markdown) return impact.markdown;
+  if (impact.updated) {
+    const mode = impact.updated_kind || impact.output_format || 'markdown';
+    return {
+      audit_mode: mode,
+      label: mode === 'html' ? 'Final HTML SEO/GEO' : 'Markdown SEO/GEO',
+      seo_score: impact.updated.seo_score,
+      geo_score: impact.updated.geo_score,
+      checks: impact.updated.checks,
+      summary: impact.updated.summary,
+    };
+  }
+  return null;
+}
+
+function rewriteAuditDelta(impact, mode) {
+  if (impact && impact.deltas && impact.deltas[mode]) return impact.deltas[mode];
+  const snap = impact && impact[mode];
+  if (!snap || !impact.prev) return null;
+  return {
+    seo_score: snap.seo_score - impact.prev.seo_score,
+    geo_score: snap.geo_score - impact.prev.geo_score,
+  };
+}
+
+function rewriteAuditCard(impact, mode) {
+  const snap = impact && impact[mode];
+  if (!snap) {
+    const label = mode === 'html' ? 'Final HTML SEO/GEO' : 'Markdown SEO/GEO';
+    return `<div class="rounded border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs text-slate-500">${label}: pending</div>`;
+  }
+  const delta = rewriteAuditDelta(impact, mode) || { seo_score: 0, geo_score: 0 };
+  return `<div class="rounded border border-indigo-900/50 bg-indigo-950/10 px-3 py-2">
+    <div class="text-xs font-semibold text-indigo-300 uppercase tracking-wide mb-1">${escHtml(snap.label || (mode === 'html' ? 'Final HTML SEO/GEO' : 'Markdown SEO/GEO'))}</div>
+    <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      <span>SEO <span class="text-slate-400">${impact.prev.seo_score}</span> → <span class="${scoreColorClass(snap.seo_score)} font-semibold">${snap.seo_score}</span> <span class="${delta.seo_score >= 0 ? 'text-green-400' : 'text-red-400'} text-xs">${fmtSignedDelta(delta.seo_score)}</span></span>
+      <span>GEO <span class="text-slate-400">${impact.prev.geo_score}</span> → <span class="${scoreColorClass(snap.geo_score)} font-semibold">${snap.geo_score}</span> <span class="${delta.geo_score >= 0 ? 'text-green-400' : 'text-red-400'} text-xs">${fmtSignedDelta(delta.geo_score)}</span></span>
+      ${snap.audited_at ? `<span class="text-xs text-slate-500">${fmtTime(snap.audited_at)}</span>` : ''}
+    </div>
+    ${snap.summary ? `<p class="text-xs text-slate-400 mt-1.5 m-0">${escHtml(snap.summary)}</p>` : ''}
+  </div>`;
+}
+
 function buildAuditDetailPanelHtml(a) {
   const slugEnc = encodeURIComponent(a.slug || '');
   const auditActions =
@@ -1629,9 +1716,24 @@ function buildAuditDetailPanelHtml(a) {
     );
   }
 
+  const impact = a.rewriteImpact || null;
+  const activeRewriteAudit = activeRewriteAuditSnapshot(impact);
+  if (impact && activeRewriteAudit && impact.prev) {
+    parts.push(
+      `<div class="mb-3 rounded-lg border border-indigo-900/60 bg-indigo-950/20 px-3 py-2">` +
+        `<div class="text-xs font-semibold text-indigo-300 uppercase tracking-wide mb-2">Rewrite audit impact from backend API</div>` +
+        `<div class="grid grid-cols-1 md:grid-cols-2 gap-2">` +
+          rewriteAuditCard(impact, 'markdown') +
+          rewriteAuditCard(impact, 'html') +
+        `</div>` +
+        (impact.rewritten_at ? `<div class="text-xs text-slate-500 mt-2">rewritten ${fmtTime(impact.rewritten_at)}</div>` : '') +
+      `</div>`,
+    );
+  }
+
   parts.push(
     `<div class="mb-3 text-xs text-slate-500 leading-relaxed">` +
-      `<span class="text-slate-300">SEO</span> and <span class="text-slate-300">GEO</span> are 0–100 rollups: aim for <b>≥70</b>. ` +
+      `<span class="text-slate-300">SEO</span> and <span class="text-slate-300">GEO</span> are 0–100 rollups: aim for <b>≥85</b>. ` +
       `They rise when you fix failed checks and improve clarity, trust signals, and intent match. ` +
       (a.model ? `<span class="text-slate-600">· ${escHtml(a.model)}</span>` : '') +
       `</div>`,
@@ -1652,6 +1754,29 @@ function buildAuditDetailPanelHtml(a) {
     }
     fl += '</ul></div>';
     parts.push(fl);
+  }
+
+  if (impact && activeRewriteAudit && activeRewriteAudit.checks) {
+    const prevChecks = impact.prev.checks || {};
+    const updatedChecks = activeRewriteAudit.checks || {};
+    const ids = Array.from(new Set([...Object.keys(prevChecks), ...Object.keys(updatedChecks)])).sort();
+    if (ids.length) {
+      let rows =
+        `<details class="text-sm mb-3" open><summary class="cursor-pointer text-indigo-300 hover:text-indigo-200">Rewrite check comparison (${escHtml(activeRewriteAudit.label || activeRewriteAudit.audit_mode || 'updated')})</summary><ul class="mt-2 space-y-1.5 list-none m-0 p-0">`;
+      for (const id of ids) {
+        const prev = prevChecks[id] || {};
+        const next = updatedChecks[id] || {};
+        const changed = prev.status !== next.status;
+        const note = next.note && next.note !== 'not_scored' ? `<div class="text-xs text-slate-500 mt-0.5">${escHtml(next.note)}</div>` : '';
+        rows += `<li class="rounded border ${changed ? 'border-indigo-900/60 bg-indigo-950/10' : 'border-slate-800'} px-2 py-1.5">` +
+          `<div class="flex flex-wrap items-center gap-2">` +
+            `<span class="text-slate-300 flex-1 min-w-[12rem]">${escHtml(formatAuditCheckLabel(id))}</span>` +
+            `${statusPill(prev.status)}<span class="text-slate-600">→</span>${statusPill(next.status)}` +
+          `</div>${note}</li>`;
+      }
+      rows += '</ul></details>';
+      parts.push(rows);
+    }
   }
 
   if (weak.length) {
@@ -1775,25 +1900,20 @@ async function fetchAuditPage() {
 
     tbody.innerHTML = data.articles
       .map((a) => {
-        const seoColor = a.seo_score >= 70 ? 'text-green-400' : a.seo_score >= 50 ? 'text-yellow-400' : 'text-red-400';
-        const geoColor = a.geo_score >= 70 ? 'text-green-400' : a.geo_score >= 50 ? 'text-yellow-400' : 'text-red-400';
+        const impact = a.rewriteImpact || null;
+        const activeAudit = activeRewriteAuditSnapshot(impact);
+        const updatedSeo = activeAudit ? activeAudit.seo_score : null;
+        const updatedGeo = activeAudit ? activeAudit.geo_score : null;
+        const scoreLabel = activeAudit
+          ? `<div class="text-[10px] text-slate-500 mt-0.5">${escHtml(activeAudit.audit_mode === 'html' ? 'HTML SEO' : 'MD SEO')}</div>`
+          : '';
         const main = `<tr class="audit-row-expandable" onclick="toggleAuditRow(this)">
         <td class="text-xs font-mono text-slate-300"><span class="audit-chevron text-slate-500 mr-1.5 select-none" aria-hidden="true">▸</span>${escHtml(a.slug || '')}</td>
         <td>
-          <div class="flex items-center gap-2">
-            <div class="w-16 bg-slate-900 rounded-full h-1.5">
-              <div class="h-1.5 rounded-full ${a.seo_score>=70?'bg-green-500':a.seo_score>=50?'bg-yellow-500':'bg-red-500'}" style="width:${a.seo_score}%"></div>
-            </div>
-            <span class="text-xs font-semibold ${seoColor}">${a.seo_score}</span>
-          </div>
+          ${renderAuditScoreCell(a.seo_score, updatedSeo)}${scoreLabel}
         </td>
         <td>
-          <div class="flex items-center gap-2">
-            <div class="w-16 bg-slate-900 rounded-full h-1.5">
-              <div class="h-1.5 rounded-full ${a.geo_score>=70?'bg-green-500':a.geo_score>=50?'bg-yellow-500':'bg-red-500'}" style="width:${a.geo_score}%"></div>
-            </div>
-            <span class="text-xs font-semibold ${geoColor}">${a.geo_score}</span>
-          </div>
+          ${renderAuditScoreCell(a.geo_score, updatedGeo)}${scoreLabel}
         </td>
         <td class="text-xs ${a.failCount>10?'text-red-400':a.failCount>5?'text-yellow-400':'text-slate-400'}">${a.failCount}</td>
         <td class="text-xs text-slate-500">${fmtTime(a.audited_at)}</td>
@@ -1845,8 +1965,11 @@ function rqHumanizeStage(stage) {
     research: 'Research',
     diagnosis: 'Planning',
     writer: 'Writer',
+    'seo-audit': 'Markdown SEO/GEO',
+    html: 'HTML',
+    'full-seo-audit': 'Full HTML SEO/GEO',
     reviewer: 'Reviewer',
-    formatter: 'MD→HTML',
+    formatter: 'Formatter',
     persist: 'Save',
     idle: 'Idle',
   };
@@ -1858,6 +1981,9 @@ function rqStageBadgeClass(stage) {
     research: 'bg-sky-900/80 text-sky-200',
     diagnosis: 'bg-violet-900/60 text-violet-200',
     writer: 'bg-emerald-900/60 text-emerald-200',
+    'seo-audit': 'bg-blue-900/70 text-blue-200',
+    html: 'bg-cyan-900/70 text-cyan-200',
+    'full-seo-audit': 'bg-fuchsia-900/60 text-fuchsia-200',
     reviewer: 'bg-amber-900/60 text-amber-200',
     formatter: 'bg-cyan-900/70 text-cyan-200',
     persist: 'bg-teal-900/60 text-teal-200',
@@ -1924,6 +2050,72 @@ function updateRqProgressBar(s) {
     slugEl.textContent = sub;
     slugEl.title = slug || '';
   }
+}
+
+function renderMarkdownInline(s) {
+  return escHtml(s)
+    .replace(/`([^`]+)`/g, '<code class="rounded bg-slate-900 px-1 py-0.5 text-[0.9em] text-slate-100">$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-slate-100">$1</strong>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, href) => {
+      const rawHref = String(href || '').replace(/&amp;/g, '&');
+      if (!/^https?:\/\//i.test(rawHref) && !rawHref.startsWith('/')) return m;
+      return `<a class="text-cyan-300 hover:underline" href="${escAttr(rawHref)}" target="_blank" rel="noopener">${label}</a>`;
+    });
+}
+
+function renderMarkdown(md) {
+  const text = String(md || '').replace(/\r\n/g, '\n').trim();
+  if (!text) return '<p class="text-slate-500">No Markdown output.</p>';
+  let body = text;
+  let metaHtml = '';
+  const fm = body.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (fm) {
+    body = body.slice(fm[0].length).trim();
+    const rows = fm[1].split('\n')
+      .map((line) => {
+        const idx = line.indexOf(':');
+        if (idx === -1) return '';
+        const key = line.slice(0, idx).trim();
+        const val = line.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
+        if (!key || !val) return '';
+        return `<div><span class="text-slate-500">${escHtml(key)}</span>: <span class="text-slate-200">${renderMarkdownInline(val)}</span></div>`;
+      })
+      .filter(Boolean)
+      .join('');
+    if (rows) metaHtml = `<div class="mb-5 rounded-lg border border-indigo-900/60 bg-indigo-950/20 p-3 text-xs">${rows}</div>`;
+  }
+
+  const lines = body.split('\n');
+  const out = [];
+  let list = [];
+  const flushList = () => {
+    if (!list.length) return;
+    out.push(`<ul class="mb-4 list-disc pl-5 space-y-1">${list.map((x) => `<li>${renderMarkdownInline(x)}</li>`).join('')}</ul>`);
+    list = [];
+  };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) {
+      flushList();
+      continue;
+    }
+    const bullet = line.match(/^[-*]\s+(.+)$/);
+    if (bullet) {
+      list.push(bullet[1]);
+      continue;
+    }
+    flushList();
+    const h = line.match(/^(#{1,4})\s+(.+)$/);
+    if (h) {
+      const level = h[1].length;
+      const cls = level === 1 ? 'text-xl mt-1 mb-3' : level === 2 ? 'text-lg mt-5 mb-2' : 'text-base mt-4 mb-2';
+      out.push(`<h${level} class="${cls} font-semibold text-slate-100">${renderMarkdownInline(h[2])}</h${level}>`);
+    } else {
+      out.push(`<p class="mb-3 text-slate-300">${renderMarkdownInline(line)}</p>`);
+    }
+  }
+  flushList();
+  return metaHtml + out.join('');
 }
 
 function stopRewriteQueuePoll() {
@@ -2005,7 +2197,7 @@ async function stopRewritePipeline() {
 async function clearRewriteStagingAll() {
   if (
     !confirm(
-      'Delete all local rewrite staging (index + HTML files under the rewrite folder) and drop legacy rewrite tables in SQLite if they exist?\n\nThis does NOT delete posts or drafts in WordPress.',
+      'Delete all local rewrite staging (index + Markdown/HTML files under the rewrite folder) and drop legacy rewrite tables in SQLite if they exist?\n\nThis does NOT delete posts or drafts in WordPress.',
     )
   ) {
     return;
@@ -2035,9 +2227,16 @@ async function runRewritePipeline() {
   const btn = document.getElementById('rq-run-btn');
   const th = document.getElementById('rq-threshold');
   const lim = document.getElementById('rq-limit');
+  const acceptHrEl = document.getElementById('rq-accept-hr');
+  const acceptSeoEl = document.getElementById('rq-accept-seo');
+  const acceptGeoEl = document.getElementById('rq-accept-geo');
+  const convertHtml = document.getElementById('rq-convert-html');
   const dry = document.getElementById('rq-dry-run');
   const threshold = Math.min(100, Math.max(0, parseInt(String(th && th.value) || '65', 10) || 65));
   const limit = Math.min(100, Math.max(1, parseInt(String(lim && lim.value) || '5', 10) || 5));
+  const acceptanceHr = Math.min(5, Math.max(1, parseFloat(String(acceptHrEl && acceptHrEl.value) || '4') || 4));
+  const acceptanceSeo = Math.min(100, Math.max(0, parseInt(String(acceptSeoEl && acceptSeoEl.value) || '85', 10) || 85));
+  const acceptanceGeo = Math.min(100, Math.max(0, parseInt(String(acceptGeoEl && acceptGeoEl.value) || '85', 10) || 85));
   if (btn) btn.disabled = true;
   try {
     const r = await postWithWriteAuth('/api/blog/rewrite-pipeline/run', {
@@ -2046,6 +2245,10 @@ async function runRewritePipeline() {
       body: JSON.stringify({
         threshold,
         limit,
+        acceptanceHr,
+        acceptanceSeo,
+        acceptanceGeo,
+        convertToHtml: !!(convertHtml && convertHtml.checked),
         dryRun: !!(dry && dry.checked),
       }),
     });
@@ -2122,19 +2325,27 @@ async function loadBlogQueue(silent) {
         ? rewrittenItems.map((it) => {
             const slug = escHtml(it.slug);
             const block = it.uploadBlocked;
+            const format = it.outputFormat || (it.rewriteHtmlPath ? 'html' : 'markdown');
+            const scores = it.reviewScores || {};
+            const scoreLine = [
+              scores.humanReadable != null ? `HR ${scores.humanReadable}/5` : '',
+              scores.seo != null ? `SEO ${scores.seo}/100` : '',
+              scores.geo != null ? `GEO ${scores.geo}/100` : '',
+            ].filter(Boolean).join(' · ');
             const readBtn = `<button type="button" class="btn btn-sm mr-1 mb-1" onclick='openRewritePreview(${JSON.stringify(String(it.itemId))})'>Read</button>`;
             const upBtn = block
-              ? '<span class="text-xs text-slate-500">Upload disabled (dry run)</span>'
+              ? `<span class="text-xs text-slate-500">${format === 'markdown' ? 'Upload needs HTML option' : 'Upload disabled (dry run)'}</span>`
               : `<button type="button" class="btn btn-primary btn-sm mb-1" onclick='uploadRewriteToWordpress(${JSON.stringify(String(it.itemId))})'>Upload</button>`;
             const live = it.sourceUrl ? `<a href="${escAttr(it.sourceUrl)}" target="_blank" rel="noopener" class="text-slate-500 hover:underline text-xs ml-1">live</a>` : '';
             const delBtn = `<button type="button" class="btn btn-sm text-red-400 mb-1" onclick='removeRewriteQueueItem(${JSON.stringify(String(it.itemId))}, "ready")'>Delete</button>`;
             return `<div class="py-2 border-b border-slate-800 last:border-0">
               <div class="font-mono text-xs text-amber-300 truncate" title="${slug}">${slug}${live}</div>
               <div class="text-xs text-slate-500 mt-1 truncate">${escHtml(it.rewrittenTitle || '')}</div>
+              <div class="text-xs text-slate-500 mt-1">${escHtml(format.toUpperCase())}${scoreLine ? ' · ' + escHtml(scoreLine) : ''}</div>
               <div class="mt-2 flex flex-wrap gap-1 items-center">${readBtn}${upBtn}${delBtn}</div>
             </div>`;
           }).join('')
-        : '<p class="text-slate-500 text-sm">Nothing waiting for upload.</p>';
+        : '<p class="text-slate-500 text-sm">No rewrite outputs yet.</p>';
     }
 
     document.getElementById('rq-done').innerHTML = doneItems.length
@@ -2176,8 +2387,22 @@ async function openRewritePreview(itemId) {
     if (rEl) rEl.textContent = d.researchNotes || '(none)';
     const diagEl = document.getElementById('rq-preview-diagnosis');
     if (diagEl) diagEl.textContent = d.diagnosisJson || '(none)';
-    const ifr = document.getElementById('rq-preview-iframe');
-    if (ifr) ifr.srcdoc = d.rewrittenHtml;
+    const format = d.outputFormat || (d.rewrittenHtml && !d.rewrittenMarkdown ? 'html' : 'markdown');
+    const output = d.rewrittenMarkdown || d.rewrittenHtml || '';
+    const rendered = document.getElementById('rq-preview-rendered');
+    const renderLabel = document.getElementById('rq-preview-render-label');
+    const rawLabel = document.getElementById('rq-preview-raw-label');
+    if (renderLabel) renderLabel.textContent = format === 'html' ? 'Rendered HTML' : 'Rendered Markdown';
+    if (rawLabel) rawLabel.textContent = format === 'html' ? 'Raw HTML' : 'Raw Markdown';
+    if (rendered) {
+      if (format === 'html') {
+        rendered.innerHTML = `<iframe title="Generated HTML preview" sandbox class="w-full min-h-[55vh] rounded bg-white" srcdoc="${escAttr(output)}"></iframe>`;
+      } else {
+        rendered.innerHTML = renderMarkdown(output);
+      }
+    }
+    const out = document.getElementById('rq-preview-output');
+    if (out) out.textContent = output;
     document.getElementById('rq-preview-dialog')?.showModal();
   } catch (e) {
     console.error(e);
@@ -2193,7 +2418,7 @@ function closeRewritePreview() {
 async function removeRewriteQueueItem(itemId, kind) {
   const messages = {
     pending: 'Remove this slug from the pending queue? The pipeline must be idle.',
-    ready: 'Delete this rewritten HTML from the dashboard and disk? Nothing is removed from WordPress.',
+    ready: 'Delete this rewritten artifact from the dashboard and disk? Nothing is removed from WordPress.',
     done: 'Remove this upload record from the dashboard? Your WordPress draft or post is not deleted.',
     failed: 'Remove this failed entry from the list?',
   };

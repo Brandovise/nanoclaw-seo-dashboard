@@ -22,8 +22,6 @@ groups/*
 
 # Secrets
 *.keys.json
-.env
-.env*
 
 # Dashboard local data (SQLite, wp-sync, git workdirs)
 dashboard/data/
@@ -42,3 +40,4 @@ dashboard/data/
 .nanoclaw/
 
 agents-sdk-docs
+config.bat

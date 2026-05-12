@@ -6,11 +6,18 @@ import type { AppConfig } from '../config.js';
 import { log } from './logger.js';
 import { runAnthropicWebResearch, type ResearchAgentInput } from './anthropic-web-research.js';
 import { PUBLICATION_BACKGROUND_FOR_PROMPTS } from './publication-context.js';
+import { auditSeoMarkdownContent, type SeoAuditRecord } from './seo-audit.js';
 
-const HTML_START = '<<<NANOCLAW_REWRITE_HTML_START>>>';
-const HTML_END = '<<<NANOCLAW_REWRITE_HTML_END>>>';
 const MD_START = '<<<NANOCLAW_REWRITE_MD_START>>>';
 const MD_END = '<<<NANOCLAW_REWRITE_MD_END>>>';
+const HTML_START = '<<<NANOCLAW_REWRITE_HTML_START>>>';
+const HTML_END = '<<<NANOCLAW_REWRITE_HTML_END>>>';
+
+export type RewriteAcceptanceThresholds = {
+  hr: number;
+  seo: number;
+  geo: number;
+};
 
 function rewriteModel(cfg: AppConfig): string {
   return cfg.REWRITE_MODEL || cfg.SEO_AUDIT_MODEL || process.env.REWRITE_MODEL || 'claude-sonnet-4-20250514';
@@ -91,16 +98,13 @@ function parseHtmlDelimited(text: string): string {
   }
   try {
     const parsed = JSON.parse(stripJsonFence(t)) as { html?: string };
-    const html = typeof parsed.html === 'string' ? parsed.html : '';
-    if (html.trim()) return html;
+    if (typeof parsed.html === 'string' && parsed.html.trim()) return parsed.html.trim();
   } catch {
     /* fall through */
   }
-  const htmlFence = t.match(/```html\s*([\s\S]*?)```/i);
+  const htmlFence = t.match(/```(?:html)?\s*([\s\S]*?)```/i);
   if (htmlFence?.[1]?.trim()) return htmlFence[1].trim();
-  throw new Error(
-    `Writer must return HTML between ${HTML_START} and ${HTML_END} (or JSON {"html":"..."} / fenced html).`,
-  );
+  throw new Error(`HTML converter must return HTML between ${HTML_START} and ${HTML_END} (or JSON {"html":"..."}).`);
 }
 
 function emitProgress(
@@ -119,6 +123,7 @@ export type ReviewerResult = {
   approve: boolean;
   human_readable: { score: number; notes: string };
   seo: { score: number; notes: string };
+  geo: { score: number; notes: string };
   factual_risk: { level: 'low' | 'medium' | 'high'; notes: string; problem_claims: string[] };
   vs_original: { improved: boolean; notes: string };
   must_fix: string[];
@@ -128,6 +133,7 @@ export type ReviewerResult = {
 
 export type OrchestratorRoundTrace = {
   round: number;
+  rewrite_audit: SeoAuditRecord;
   reviewer: ReviewerResult;
   revised: boolean;
 };
@@ -135,16 +141,19 @@ export type OrchestratorRoundTrace = {
 export type OrchestratorTrace = {
   review_rounds: number;
   final_approved: boolean;
+  acceptance_thresholds: RewriteAcceptanceThresholds;
+  final_html_audit?: SeoAuditRecord;
   /** True when the last round met score gates but the model did not set approve (orchestrator promoted). */
   soft_approved?: boolean;
   rounds: OrchestratorRoundTrace[];
 };
 
-function shouldSoftApproveOnFinalRound(r: ReviewerResult): boolean {
+function meetsAcceptanceThresholds(r: ReviewerResult, thresholds: RewriteAcceptanceThresholds): boolean {
   return (
     r.factual_risk.level !== 'high' &&
-    r.human_readable.score >= 4 &&
-    r.seo.score >= 3 &&
+    r.human_readable.score >= thresholds.hr &&
+    r.seo.score >= thresholds.seo &&
+    r.geo.score >= thresholds.geo &&
     r.vs_original.improved
   );
 }
@@ -160,6 +169,8 @@ export type RevisionNote = {
 /** Single structured object serialized into writer / reviewer / formatter calls (no chat transcript). */
 export type EditorialState = {
   topic: { title: string; slug: string };
+  /** Original SEO audit context that selected this page for rewriting. */
+  seo_audit: { summary: string; failing_checks: string; checks_json: string };
   research: string;
   diagnosis_json: string;
   interlink_hints: string;
@@ -187,6 +198,7 @@ async function runDiagnosisAgent(
     slug: string;
     summary: string;
     failNotes: string;
+    checksJson: string;
     researchNotes: string;
     /** Claude/graph interlink cues — informs rewrite_focus (e.g. internal_links audit). */
     interlinkHints?: string;
@@ -196,7 +208,7 @@ async function runDiagnosisAgent(
 Respond with a single JSON object only, no markdown fences inside (raw JSON).
 Schema: { "bullets": string[], "rewrite_focus": string[] }
 - bullets: 4–8 concise reasons the page underperforms (SEO audit + research themes).
-- rewrite_focus: 3–6 priorities for the writer; do NOT copy long verbatim research facts into this JSON—summarize themes only (e.g. "refresh statutory context" not exact euro figures).
+- rewrite_focus: 3–8 priorities for the writer covering **every important FAIL / weak SEO-GEO check** from checks_json; do NOT copy long verbatim research facts into this JSON—summarize themes only (e.g. "refresh statutory context" not exact euro figures).
 - When interlink hints are provided, mention weaving specific internal outbound links naturally if internal linking / crawl depth showed up as weak.
 
 ${PUBLICATION_BACKGROUND_FOR_PROMPTS}`;
@@ -211,6 +223,9 @@ Slug: ${input.slug}
 Audit summary: ${input.summary || '(none)'}
 Failing checks:
 ${input.failNotes || '(none)'}
+
+Full checks_json from the original SEO/GEO audit:
+${input.checksJson || '{}'}
 
 Internal research themes (may be imperfect—writer must not invent specifics):
 ${input.researchNotes || '(none)'}
@@ -230,12 +245,23 @@ function trunc(s: string, n: number): string {
   return t.slice(0, n) + '…';
 }
 
-function buildCritiqueFromReviewer(r: ReviewerResult, round: number): string {
+function buildCritiqueFromReviewer(r: ReviewerResult, round: number, rewriteAudit: SeoAuditRecord): string {
   const lines = [
     `Round ${round} — approve: ${r.approve}`,
-    `Scores: HR ${r.human_readable.score}/5, SEO ${r.seo.score}/5, factual_risk ${r.factual_risk.level}`,
+    `Scores: HR ${r.human_readable.score}/5, SEO ${r.seo.score}/100, GEO ${r.geo.score}/100, factual_risk ${r.factual_risk.level}`,
+    `rewrite_audit_json:\n${JSON.stringify(
+      {
+        seo_score: rewriteAudit.seo_score,
+        geo_score: rewriteAudit.geo_score,
+        summary: rewriteAudit.summary,
+        checks: rewriteAudit.checks,
+      },
+      null,
+      2,
+    )}`,
     `human_readable: ${trunc(r.human_readable.notes, 900)}`,
     `seo: ${trunc(r.seo.notes, 900)}`,
+    `geo: ${trunc(r.geo.notes, 900)}`,
     `factual_risk: ${trunc(r.factual_risk.notes, 900)}`,
     `vs_original improved=${r.vs_original.improved}: ${trunc(r.vs_original.notes, 600)}`,
     r.factual_risk.problem_claims.length
@@ -265,10 +291,11 @@ function buildWriterMarkdownSystemPrompt(cfg: AppConfig): string {
 ${PUBLICATION_BACKGROUND_FOR_PROMPTS}
 
 ## Structured state (not chat history)
-- The user message contains **EDITORIAL_STATE** as JSON: \`topic\`, \`research\`, \`diagnosis_json\`, \`interlink_hints\`, \`current_draft_markdown\`, \`revision_notes\`.
+- The user message contains **EDITORIAL_STATE** as JSON: \`topic\`, \`seo_audit\`, \`research\`, \`diagnosis_json\`, \`interlink_hints\`, \`current_draft_markdown\`, \`revision_notes\`.
+- **seo_audit.checks_json is the full original SEO/GEO audit input. You must read it and address all FAIL / weak checks that can be fixed in Markdown body content.** Do not rely only on diagnosis_json summaries.
 - **revision_notes** is an ordered list: each item has \`round\`, \`critique\` (reviewer feedback that round), and \`changes_made\`. For **completed** rounds, \`changes_made\` summarizes what the writer did—**do not undo** those without a new critique. The **latest** entry may have an empty \`changes_made\`: that \`critique\` is what you must satisfy **this** turn.
 - **current_draft_markdown** is the draft to revise (empty on first pass). Apply every open \`critique\` whose \`changes_made\` is still empty or incomplete; prefer the **latest** round’s must_fix/writer_brief inside that critique when something conflicts.
-- Research and diagnosis are **not** published. Do **not** dump raw research or invent € amounts unless they appear in **source HTML**.
+- Research, diagnosis, and seo_audit are **not** published. Do **not** dump raw research or audit notes into the article; transform them into useful reader-facing improvements. Do **not** invent € amounts unless they appear in **source HTML**.
 
 ## Voice
 - Professional, calm, **Sie**-Anrede unless the source HTML consistently uses **du** in a section—then stay consistent per section.
@@ -276,8 +303,14 @@ ${PUBLICATION_BACKGROUND_FOR_PROMPTS}
 - Feels human-edited, not keyword-stuffed.
 
 ## SEO / GEO (align with dashboard SEO audit)
+- Start the Markdown file with YAML front matter so metadata is explicit in the \`.md\` artifact:
+  - \`title\`: reader-facing SEO title.
+  - \`meta_description\`: 140–160 character SERP-style description.
+  - \`slug\`: canonical slug.
+  - \`canonical_url\`: canonical URL when the site base is known.
 - Strong heading ladder (# / ## / ###), answer-first where natural, solid E-E-A-T.
-- Address diagnosis / failing audit themes—without robotic keyword stuffing.
+- Address **all actionable failures** from \`seo_audit.checks_json\` plus diagnosis / research themes—without robotic keyword stuffing.
+- CMS/theme-only checks (schema and Core Web Vitals) cannot be fully fixed in Markdown; still support them where possible with snippet-ready intro, clear headings, E-E-A-T/trust copy, and image-alt suggestions in prose only if natural.
 - **Internal links**: If **interlink_hints** lists URLs slugs or Markdown link lines, weave in **at least 4** contextual \`[anchor](absolute-url)\` links to relevant related pages—not a footer blob; scatter in body sections where they aid navigation. Omit a suggested URL only if it is genuinely off-topic.
 - If hints are sparse, infer 2–4 internal links using the same site's path style as in **SOURCE HTML** (match domain + slug paths from existing anchors in source).
 
@@ -296,9 +329,16 @@ ${PUBLICATION_BACKGROUND_FOR_PROMPTS}
 ## Output (mandatory)
 Return the **full** revised article as **Markdown only** between these lines:
 ${MD_START}
-…complete Markdown…
+---
+title: "..."
+meta_description: "..."
+slug: "..."
+canonical_url: "..."
+---
+
+# …complete Markdown article…
 ${MD_END}
-Use standard Markdown (# headings, lists, **bold**, [text](url) for links). Avoid raw HTML tags unless the source contained essential inline HTML you must preserve (rare).
+Use standard Markdown (# headings, lists, **bold**, [text](url) for links). Include the YAML front matter exactly once at the top. Avoid raw HTML tags unless the source contained essential inline HTML you must preserve (rare).
 
 ${siteLine}`;
 }
@@ -329,79 +369,46 @@ Return full Markdown with ${MD_START} / ${MD_END}.`;
   return parseMarkdownDelimited(text);
 }
 
-function buildFormatterSystemPrompt(_cfg: AppConfig): string {
-  return `You are the **HTML formatter agent**. The editorial crew produced **approved (or last) Markdown** and **EDITORIAL_STATE** JSON for context.
-
-${PUBLICATION_BACKGROUND_FOR_PROMPTS}
-
-Rules:
-- Preserve **as much as practical** of the original HTML scaffolding: \`<!-- wp:...\` block comments, shortcodes, classes, and inline structure from the source so the site theme still applies after paste.
-- If the original is clearly **Elementor front-end markup** (e.g. \`data-elementor-type\`, \`elementor-widget-*\` classes), do **not** paste the whole page scaffold into one block: output a normal **article body** fragment (headings, paragraphs, lists, links, semantic sections) only—no duplicate outer Elementor layout wrappers.
-- Replace inner paragraph/heading/list **content** so it reflects the approved Markdown (semantic mapping). If Markdown reorders sections, you may reorder the corresponding blocks.
-- Do **not** invent new factual claims, numbers, or legal specifics—only what follows from the Markdown.
-- Do **not** paste internal research, reviewer critique, or revision_notes into the page.
-
-## Output (mandatory)
-Return **one** full HTML document fragment (full post body) only between:
-${HTML_START}
-…complete HTML…
-${HTML_END}`;
-}
-
-async function runMarkdownToHtmlAgent(
-  cfg: AppConfig,
-  input: { editorialState: EditorialState; approvedMarkdown: string; originalHtml: string },
-): Promise<string> {
-  const maxChars = cfg.REWRITE_MAX_HTML_CHARS;
-  if (input.originalHtml.length > maxChars) {
-    throw new Error(`Content HTML exceeds REWRITE_MAX_HTML_CHARS (${maxChars}).`);
-  }
-  const stateForFormatter: EditorialState = {
-    ...input.editorialState,
-    current_draft_markdown: input.approvedMarkdown,
-  };
-  const user = `${editorialStateBlock(stateForFormatter)}
-=== APPROVED MARKDOWN (map into HTML structure; matches state.current_draft_markdown) ===
-${input.approvedMarkdown}
-=== END MARKDOWN ===
-
-=== ORIGINAL HTML (structure template) ===
-${input.originalHtml}
-=== END ORIGINAL ===
-
-Return full HTML with ${HTML_START} / ${HTML_END}.`;
-
-  const text = await callClaudeText(cfg, buildFormatterSystemPrompt(cfg), user, 36_000);
-  return parseHtmlDelimited(text);
-}
-
-function buildReviewerSystemPrompt(candidateIsMarkdown: boolean): string {
+function buildReviewerSystemPromptWithThresholds(
+  candidateIsMarkdown: boolean,
+  thresholds: RewriteAcceptanceThresholds,
+): string {
   return `You are the **reviewer agent**. The user message includes **EDITORIAL_STATE** (JSON): topic, research, diagnosis, \`current_draft_markdown\` (the draft under review), and **revision_notes** (prior critiques and what the writer reported changing).
 
 ${PUBLICATION_BACKGROUND_FOR_PROMPTS}
 
-You also see **SEO audit signals** (summary, failing checks, checks_json excerpt) and the **original article HTML** for factual baseline.
+You also see **original full-page SEO audit signals** (summary, failing checks, checks_json excerpt), a **Markdown-actionable rewrite audit**, and the **original article HTML** for factual baseline.
 
-Your job: judge whether the Markdown draft is fit for the **next step** (formatter after approval vs. another writer pass).
+Your job: judge whether the Markdown draft is fit to save as the rewrite output, or whether it needs another writer pass.
+
+## SEO / GEO scope for this reviewer pass
+You are reviewing a **Markdown artifact**, not final theme HTML.
+- Use **REWRITE_MARKDOWN_SEO_AUDIT_JSON** as the scoring source for SEO/GEO. It is already scoped to Markdown-fixable issues.
+- Do **not** block approval for final HTML/CMS-only criteria: schema markup implementation, final image selection/alt text, mobile UX, Core Web Vitals, Elementor/theme layout, or final rendered structured data. Mention them only as deferred notes if relevant.
+- Do block approval for Markdown-fixable SEO/GEO problems: front matter metadata, title/meta length and uniqueness, heading ladder, answer-first intro, keyword naturalness, internal links, external/source citations, E-E-A-T/trust copy, snippet/FAQ clarity, topical completeness, CTA clarity, and GEO/entity clarity.
+- You still must review non-SEO aspects: human readability, factual risk, research/source alignment, and regression vs original.
 
 Respond with **one JSON object only** (no markdown), schema:
 {
   "approve": boolean,
   "human_readable": { "score": number, "notes": string },
   "seo": { "score": number, "notes": string },
+  "geo": { "score": number, "notes": string },
   "factual_risk": { "level": "low"|"medium"|"high", "notes": string, "problem_claims": string[] },
   "vs_original": { "improved": boolean, "notes": string },
   "must_fix": string[],
   "writer_brief": string
 }
 
+Scoring:
+- **human_readable.score** is **1–5**: clarity, scannability, tone, undue repetition—not keyword stuffing; align with independent-advisor / transparency positioning where appropriate (see publication context above).
+- **seo.score** and **geo.score** are **0–100**, matching the dashboard SEO page scale. Copy the numeric scores from **REWRITE_MARKDOWN_SEO_AUDIT_JSON** exactly. Use notes to explain the concrete Markdown-actionable check failures or improvements.
+
 Rules:
-- **seo.score** (1–5) and **seo.notes**: Use **checks_json** plus the visible candidate. Score **body-level** improvements (headings, internal links inside the Markdown/HTML body, readability, snippets). **Do not** treat Yoast/meta description, the HTML title element, canonical URLs, or JSON-LD/schema fields as reasons to score ≤2—they are applied outside this Markdown step; say "defer to WP/SEO plugin" in notes instead of blocking.
-- **human_readable**: clarity, scannability, tone, undue repetition—not keyword stuffing; align with independent-advisor / transparency positioning where appropriate (see publication context above).
-- **approve: true** when **all** of: vs_original.improved is true (or negligible regression); human_readable.score **≥ 4**; seo.score **≥ 3**; factual_risk is **not** **high**. **Medium** factual_risk can still approve if **problem_claims** are hedged wording or citations that roughly match original/research—not invented law/coverage guarantees.
-- **approve: false** when factual_risk is **high**, human_readable ≤3, seo ≤2 due to fixable-in-body gaps (e.g. no internal links despite strong hints URLs in state), or the draft clearly regresses vs original.
+- **approve: true** only when **all** of: vs_original.improved is true (or negligible regression); human_readable.score **≥ ${thresholds.hr}**; seo.score **≥ ${thresholds.seo}**; geo.score **≥ ${thresholds.geo}**; factual_risk is **not** **high**. **Medium** factual_risk can still approve if **problem_claims** are hedged wording or citations that roughly match original/research—not invented law/coverage guarantees.
+- **approve: false** when any required gate fails: factual_risk is **high**, human_readable <${thresholds.hr}, seo <${thresholds.seo}, geo <${thresholds.geo}, or the draft clearly regresses vs original.
 - **problem_claims**: quoted short phrases from the **revised candidate** (${candidateIsMarkdown ? 'Markdown' : 'HTML'}) that look like new concrete facts (amounts, dates, case numbers, coverage sums) **not** clearly supported by the **original HTML**—flag them.
-- **must_fix**: imperative items for the writer; empty if approve.
+- **must_fix**: imperative items for the writer; empty if approve. Only include fixes the Markdown writer can perform in this stage, plus factual/research/HR fixes. Do not include deferred final-HTML/CMS work as must_fix.
 - **writer_brief**: short paragraph of guidance for the next draft; empty if approve.
 - Be strict on hallucinated or over-specific regulatory detail in body copy.`;
 }
@@ -409,6 +416,7 @@ Rules:
 function normalizeReviewer(raw: Record<string, unknown>): ReviewerResult {
   const hr = raw.human_readable as Record<string, unknown> | undefined;
   const seo = raw.seo as Record<string, unknown> | undefined;
+  const geo = raw.geo as Record<string, unknown> | undefined;
   const fr = raw.factual_risk as Record<string, unknown> | undefined;
   const vo = raw.vs_original as Record<string, unknown> | undefined;
   const mustFixRaw = raw.must_fix ?? raw.mustFix;
@@ -424,8 +432,12 @@ function normalizeReviewer(raw: Record<string, unknown>): ReviewerResult {
       notes: String(hr?.notes ?? ''),
     },
     seo: {
-      score: Math.min(5, Math.max(1, Number(seo?.score ?? 3))),
+      score: Math.min(100, Math.max(0, Number(seo?.score ?? 65))),
       notes: String(seo?.notes ?? ''),
+    },
+    geo: {
+      score: Math.min(100, Math.max(0, Number(geo?.score ?? 65))),
+      notes: String(geo?.notes ?? ''),
     },
     factual_risk: {
       level,
@@ -456,6 +468,8 @@ async function runReviewerAgent(
     researchNotes: string;
     originalHtml: string;
     editorialState: EditorialState;
+    rewriteAudit: SeoAuditRecord;
+    acceptanceThresholds: RewriteAcceptanceThresholds;
     candidateIsMarkdown: boolean;
   },
 ): Promise<ReviewerResult> {
@@ -470,6 +484,18 @@ ${input.failNotes || '(none)'}
 checks_json (raw, excerpt if long) — use this to calibrate **seo.score** and **seo.notes**:
 ${input.checksJson.slice(0, 4000)}
 
+REWRITE_MARKDOWN_SEO_AUDIT_JSON (Markdown-actionable SEO/GEO pipeline run on the candidate Markdown; copy seo_score and geo_score into your JSON scores):
+${JSON.stringify(
+  {
+    seo_score: input.rewriteAudit.seo_score,
+    geo_score: input.rewriteAudit.geo_score,
+    summary: input.rewriteAudit.summary,
+    checks: input.rewriteAudit.checks,
+  },
+  null,
+  2,
+).slice(0, 8000)}
+
 Internal research (for hallucination cross-check—not for public paste):
 ${input.researchNotes.slice(0, 8000)}
 
@@ -481,24 +507,143 @@ ${input.originalHtml.slice(0, 120_000)}
 
 Return JSON only.`;
 
-  const text = await callClaudeText(cfg, buildReviewerSystemPrompt(input.candidateIsMarkdown), user, 4096);
+  const text = await callClaudeText(
+    cfg,
+    buildReviewerSystemPromptWithThresholds(input.candidateIsMarkdown, input.acceptanceThresholds),
+    user,
+    4096,
+  );
   let rawObj: Record<string, unknown>;
   try {
     rawObj = JSON.parse(stripJsonFence(text)) as Record<string, unknown>;
   } catch {
     throw new Error(`Reviewer agent returned invalid JSON: ${text.slice(0, 400)}`);
   }
-  return normalizeReviewer(rawObj);
+  const normalized = normalizeReviewer(rawObj);
+  normalized.seo.score = input.rewriteAudit.seo_score;
+  normalized.geo.score = input.rewriteAudit.geo_score;
+  if (!normalized.seo.notes.trim()) normalized.seo.notes = input.rewriteAudit.summary ?? '';
+  if (!normalized.geo.notes.trim()) normalized.geo.notes = input.rewriteAudit.summary ?? '';
+  return normalized;
 }
 
 function reviewerLogFields(reviewer: ReviewerResult): Record<string, unknown> {
   return {
     hrNotes: trunc(reviewer.human_readable.notes, 500),
     seoNotes: trunc(reviewer.seo.notes, 500),
+    geoNotes: trunc(reviewer.geo.notes, 500),
     factualNotes: trunc(reviewer.factual_risk.notes, 500),
     vsOriginalNotes: trunc(reviewer.vs_original.notes, 400),
     problemClaimsSample: reviewer.factual_risk.problem_claims.slice(0, 5),
   };
+}
+
+function htmlConversionTraceContext(trace: OrchestratorTrace): string {
+  return JSON.stringify(
+    {
+      final_approved: trace.final_approved,
+      soft_approved: trace.soft_approved ?? false,
+      acceptance_thresholds: trace.acceptance_thresholds,
+      rounds: trace.rounds.map((r) => ({
+        round: r.round,
+        revised: r.revised,
+        markdown_audit: {
+          seo_score: r.rewrite_audit.seo_score,
+          geo_score: r.rewrite_audit.geo_score,
+          summary: r.rewrite_audit.summary,
+          failing_checks: Object.fromEntries(
+            Object.entries(r.rewrite_audit.checks).filter(([, v]) => v.status === 'FAIL'),
+          ),
+        },
+        reviewer: {
+          approve: r.reviewer.approve,
+          human_readable: r.reviewer.human_readable,
+          seo: r.reviewer.seo,
+          geo: r.reviewer.geo,
+          factual_risk: r.reviewer.factual_risk,
+          vs_original: r.reviewer.vs_original,
+          must_fix: r.reviewer.must_fix,
+          writer_brief: r.reviewer.writer_brief,
+        },
+      })),
+    },
+    null,
+    2,
+  );
+}
+
+function buildHtmlConversionSystemPrompt(cfg: AppConfig): string {
+  const site = (cfg.WP_SITE_URL || process.env.WP_SITE_URL || '').replace(/\/+$/, '');
+  const siteLine = site ? `Site base: ${site}. Use it for canonical/internal URL consistency.` : '';
+  return `You are the **HTML conversion writer** for a German YMYL financial advisory article.
+
+${PUBLICATION_BACKGROUND_FOR_PROMPTS}
+
+Your job is **not to review the article again**. The Markdown article was already reviewed for content quality, HR, factual risk, Markdown SEO, and GEO. Your job is to transform that accepted Markdown into basic SEO-optimized HTML while preserving the accepted content and keeping all prior SEO/reviewer decisions intact.
+
+Inputs you will receive:
+- ACCEPTED_MARKDOWN: source of truth for body copy and metadata.
+- ORIGINAL_SEO_CONTEXT: original audit summary, failing checks, and checks_json.
+- REVIEWER_AND_MARKDOWN_AUDIT_CONTEXT: all reviewer rounds and Markdown SEO/GEO audit points.
+
+Conversion rules:
+- Preserve the accepted Markdown's meaning, claims, tone, section order, headings, internal links, and reviewer-approved fixes.
+- Do not introduce new facts, numbers, legal claims, coverage guarantees, or marketing hype.
+- Convert YAML front matter into HTML SEO primitives: <title>, <meta name="description">, <link rel="canonical"> when present, and a slug meta/comment only if useful.
+- Produce a complete basic HTML document: <!doctype html>, <html lang="de">, <head>, <body>, one semantic <article>.
+- Use clean semantic HTML: h1-h4, p, ul/ol/li, strong, em, a, blockquote where appropriate.
+- Preserve all Markdown links as <a href="..."> with their anchor text. Do not create a footer blob of links.
+- Address full-page SEO/GEO concerns that are possible in basic HTML: metadata, canonical, semantic heading structure, internal links, answer-first intro, Article JSON-LD, and FAQPage JSON-LD only when the accepted Markdown has explicit FAQ-style Q&A content.
+- You may add non-visible structured data derived from the accepted Markdown metadata and headings, but do not add visible body claims that are not in the Markdown.
+- Do not add styling, theme classes, scripts other than JSON-LD, tracking pixels, forms, or CMS-specific Elementor markup.
+
+Output:
+Return the complete HTML only between:
+${HTML_START}
+...html...
+${HTML_END}
+
+${siteLine}`;
+}
+
+export async function runSeoHtmlConversionAgent(
+  cfg: AppConfig,
+  input: {
+    slug: string;
+    title: string;
+    markdown: string;
+    auditSummary: string;
+    failNotes: string;
+    checksJson: string;
+    trace: OrchestratorTrace;
+  },
+): Promise<string> {
+  const user = `Article slug: ${input.slug}
+Article title: ${input.title}
+
+=== ACCEPTED_MARKDOWN (source of truth) ===
+${input.markdown}
+=== END ACCEPTED_MARKDOWN ===
+
+=== ORIGINAL_SEO_CONTEXT ===
+summary:
+${input.auditSummary || '(none)'}
+
+failing_checks:
+${input.failNotes || '(none)'}
+
+checks_json:
+${input.checksJson.slice(0, 12_000)}
+=== END ORIGINAL_SEO_CONTEXT ===
+
+=== REVIEWER_AND_MARKDOWN_AUDIT_CONTEXT ===
+${htmlConversionTraceContext(input.trace).slice(0, 20_000)}
+=== END REVIEWER_AND_MARKDOWN_AUDIT_CONTEXT ===
+
+Convert the accepted Markdown into basic SEO-optimized HTML. Do not run or simulate a reviewer. Return only delimited HTML.`;
+
+  const text = await callClaudeText(cfg, buildHtmlConversionSystemPrompt(cfg), user, 16_000);
+  return parseHtmlDelimited(text);
 }
 
 /**
@@ -516,10 +661,11 @@ export async function runOrchestratedArticleRewrite(
     checksJson: string;
     originalHtml: string;
     interlinkHints: string;
+    acceptanceThresholds: RewriteAcceptanceThresholds;
     /** Live progress for dashboard UI (orchestrator / agent stages). */
     onProgress?: (ev: { stage: string; message: string }) => void;
   },
-): Promise<{ html: string; researchNotes: string; diagnosisJson: string; trace: OrchestratorTrace }> {
+): Promise<{ markdown: string; researchNotes: string; diagnosisJson: string; trace: OrchestratorTrace }> {
   const onP = params.onProgress;
   const researchInput: ResearchAgentInput = {
     slug: params.slug,
@@ -528,6 +674,7 @@ export async function runOrchestratedArticleRewrite(
     contentSnippet: params.contentSnippet,
     auditSummary: params.auditSummary,
     failNotes: params.failNotes,
+    checksJson: params.checksJson,
   };
   emitProgress(onP, 'research', 'Research agent: web search and internal notes…');
   const researchNotes = await runAnthropicWebResearch(cfg, researchInput);
@@ -535,6 +682,11 @@ export async function runOrchestratedArticleRewrite(
 
   const state: EditorialState = {
     topic: { title: params.title, slug: params.slug },
+    seo_audit: {
+      summary: params.auditSummary,
+      failing_checks: params.failNotes,
+      checks_json: params.checksJson,
+    },
     research: researchNotes,
     diagnosis_json: '',
     interlink_hints: params.interlinkHints,
@@ -548,6 +700,7 @@ export async function runOrchestratedArticleRewrite(
     slug: params.slug,
     summary: params.auditSummary,
     failNotes: params.failNotes,
+    checksJson: params.checksJson,
     researchNotes,
     interlinkHints: params.interlinkHints,
   });
@@ -564,10 +717,28 @@ export async function runOrchestratedArticleRewrite(
   emitProgress(onP, 'writer', 'Writer (Markdown): initial draft ready');
 
   const maxReviews = Math.max(1, Math.min(8, cfg.REWRITE_MAX_REVIEW_ROUNDS ?? 6));
-  const trace: OrchestratorTrace = { review_rounds: maxReviews, final_approved: false, rounds: [] };
+  const thresholds = params.acceptanceThresholds;
+  const trace: OrchestratorTrace = {
+    review_rounds: maxReviews,
+    final_approved: false,
+    acceptance_thresholds: thresholds,
+    rounds: [],
+  };
 
   for (let r = 1; r <= maxReviews; r++) {
     if (cfg.REWRITE_PAUSE_MS > 0) await new Promise((res) => setTimeout(res, cfg.REWRITE_PAUSE_MS));
+
+    emitProgress(onP, 'seo-audit', `Markdown SEO/GEO audit: round ${r}/${maxReviews}…`);
+    const rewriteAudit = await auditSeoMarkdownContent(cfg, {
+      slug: params.slug,
+      title: params.title,
+      bodyText: state.current_draft_markdown,
+    });
+    emitProgress(
+      onP,
+      'seo-audit',
+      `Markdown SEO/GEO audit: SEO ${rewriteAudit.seo_score}/100, GEO ${rewriteAudit.geo_score}/100`,
+    );
 
     emitProgress(onP, 'reviewer', `Reviewer (Markdown): round ${r}/${maxReviews}…`);
     const reviewer = await runReviewerAgent(cfg, {
@@ -579,55 +750,57 @@ export async function runOrchestratedArticleRewrite(
       researchNotes,
       originalHtml: params.originalHtml,
       editorialState: state,
+      rewriteAudit,
+      acceptanceThresholds: thresholds,
       candidateIsMarkdown: true,
     });
 
-    const revised =
-      !reviewer.approve &&
-      r < maxReviews &&
-      (reviewer.must_fix.length > 0 || reviewer.writer_brief.trim().length > 0);
-    trace.rounds.push({ round: r, reviewer, revised });
+    const passesThresholds = meetsAcceptanceThresholds(reviewer, thresholds);
+    const accepted = reviewer.approve && passesThresholds;
+    const revised = !accepted && r < maxReviews;
+    trace.rounds.push({ round: r, rewrite_audit: rewriteAudit, reviewer, revised });
 
     const hr = reviewer.human_readable.score;
     const seo = reviewer.seo.score;
+    const geo = reviewer.geo.score;
     const risk = reviewer.factual_risk.level;
     const noteTail = [
       reviewer.human_readable.notes.trim() ? `Readability: ${trunc(reviewer.human_readable.notes, 140)}` : '',
       reviewer.seo.notes.trim() ? `SEO: ${trunc(reviewer.seo.notes, 140)}` : '',
+      reviewer.geo.notes.trim() ? `GEO: ${trunc(reviewer.geo.notes, 120)}` : '',
       reviewer.factual_risk.notes.trim() ? `Facts: ${trunc(reviewer.factual_risk.notes, 120)}` : '',
     ]
       .filter(Boolean)
       .join(' · ');
 
-    const softPass =
-      !reviewer.approve && r === maxReviews && shouldSoftApproveOnFinalRound(reviewer);
+    const softPass = !accepted && r === maxReviews && passesThresholds;
     if (softPass) {
       log.info({ slug: params.slug, reviewRound: r }, 'rewrite: final-round soft-approve (scores OK, model held approve)');
     }
 
-    if (reviewer.approve) {
+    if (accepted) {
       emitProgress(
         onP,
         'reviewer',
-        `Reviewer: Markdown approved — HR ${hr}/5, SEO ${seo}/5, risk ${risk}${noteTail ? ` — ${noteTail}` : ''}`,
+        `Reviewer: Markdown approved — HR ${hr}/5, SEO ${seo}/100, GEO ${geo}/100, risk ${risk}${noteTail ? ` — ${noteTail}` : ''}`,
       );
     } else if (softPass) {
       emitProgress(
         onP,
         'reviewer',
-        `Reviewer: accepted on last round (soft) — HR ${hr}/5, SEO ${seo}/5, risk ${risk}${noteTail ? ` — ${noteTail}` : ''}`,
+        `Reviewer: accepted on last round (soft) — HR ${hr}/5, SEO ${seo}/100, GEO ${geo}/100, risk ${risk}${noteTail ? ` — ${noteTail}` : ''}`,
       );
     } else if (revised) {
       emitProgress(
         onP,
         'reviewer',
-        `Reviewer: Markdown revision — ${reviewer.must_fix.length} must-fix; HR ${hr}/5, SEO ${seo}/5, risk ${risk}${noteTail ? ` — ${noteTail}` : ''}`,
+        `Reviewer: Markdown revision — ${reviewer.must_fix.length} must-fix; HR ${hr}/5, SEO ${seo}/100, GEO ${geo}/100, risk ${risk}${noteTail ? ` — ${noteTail}` : ''}`,
       );
     } else {
       emitProgress(
         onP,
         'reviewer',
-        `Reviewer: no further MD revision (HR ${hr}/5, SEO ${seo}/5, risk ${risk})${noteTail ? ` — ${noteTail}` : ''}`,
+        `Reviewer: no further MD revision (HR ${hr}/5, SEO ${seo}/100, GEO ${geo}/100, risk ${risk})${noteTail ? ` — ${noteTail}` : ''}`,
       );
     }
 
@@ -636,17 +809,18 @@ export async function runOrchestratedArticleRewrite(
         slug: params.slug,
         reviewRound: r,
         candidateFormat: 'markdown',
-        approve: reviewer.approve || softPass,
+        approve: accepted || softPass,
         factualRisk: reviewer.factual_risk?.level,
         hrScore: reviewer.human_readable?.score,
         seoScore: reviewer.seo?.score,
+        geoScore: reviewer.geo?.score,
         vsImproved: reviewer.vs_original.improved,
         ...reviewerLogFields(reviewer),
       },
       'reviewer agent',
     );
 
-    if (reviewer.approve || softPass) {
+    if (accepted || softPass) {
       trace.final_approved = true;
       trace.soft_approved = softPass;
       break;
@@ -657,7 +831,7 @@ export async function runOrchestratedArticleRewrite(
     const prevMd = state.current_draft_markdown;
     state.revision_notes.push({
       round: r,
-      critique: buildCritiqueFromReviewer(reviewer, r),
+      critique: buildCritiqueFromReviewer(reviewer, r, rewriteAudit),
       changes_made: '',
     });
 
@@ -677,7 +851,7 @@ export async function runOrchestratedArticleRewrite(
     emitProgress(
       onP,
       'reviewer',
-      'Crew: using last Markdown → HTML — reviewer did not fully approve MD (human QA recommended)',
+      'Crew: using last Markdown draft — reviewer did not fully approve MD (human QA recommended)',
     );
     log.warn({ slug: params.slug, rounds: trace.rounds.length }, 'rewrite finished without reviewer approval—using last draft');
   } else if (trace.soft_approved) {
@@ -688,13 +862,5 @@ export async function runOrchestratedArticleRewrite(
     );
   }
 
-  emitProgress(onP, 'formatter', 'Formatter: Markdown → WordPress HTML (structured state + final draft)…');
-  const html = await runMarkdownToHtmlAgent(cfg, {
-    editorialState: state,
-    approvedMarkdown: md,
-    originalHtml: params.originalHtml,
-  });
-  emitProgress(onP, 'formatter', 'Formatter: HTML ready');
-
-  return { html, researchNotes, diagnosisJson, trace };
+  return { markdown: md, researchNotes, diagnosisJson, trace };
 }

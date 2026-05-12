@@ -127,11 +127,19 @@ export function createBlogRewritePipelineRouter(cfg: AppConfig, _seo: Database.D
       threshold?: number;
       limit?: number;
       dryRun?: boolean;
+      acceptanceHr?: number;
+      acceptanceSeo?: number;
+      acceptanceGeo?: number;
+      convertToHtml?: boolean;
     };
     const start = startContentRewritePipelineJob(cfg, {
       threshold: body.threshold,
       limit: body.limit,
       dryRun: body.dryRun,
+      acceptanceHr: body.acceptanceHr,
+      acceptanceSeo: body.acceptanceSeo,
+      acceptanceGeo: body.acceptanceGeo,
+      convertToHtml: body.convertToHtml,
     });
     if (start.started) {
       log.info({ threshold: body.threshold, limit: body.limit, dryRun: body.dryRun }, 'POST /api/blog/rewrite-pipeline/run');

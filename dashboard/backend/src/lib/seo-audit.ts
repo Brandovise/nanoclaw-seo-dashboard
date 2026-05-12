@@ -204,6 +204,14 @@ type WpRow = {
   content_html: string | null;
 };
 
+export type SeoAuditContentInput = {
+  slug: string;
+  title: string;
+  bodyText: string;
+};
+
+type SeoAuditMode = 'full_page' | 'rewritten_markdown';
+
 /** Re-audit when WP content changed after the last audit. */
 function wpNeedsAudit(wpModified: string | null, existing: SeoAuditRecord | undefined): boolean {
   if (!existing) return true;
@@ -286,7 +294,11 @@ function anthropicKey(cfg: AppConfig): string | undefined {
   return k || undefined;
 }
 
-async function callAnthropicAudit(cfg: AppConfig, row: WpRow): Promise<SeoAuditRecord> {
+async function callAnthropicAuditForBody(
+  cfg: AppConfig,
+  input: SeoAuditContentInput,
+  mode: SeoAuditMode = 'full_page',
+): Promise<SeoAuditRecord> {
   const key = anthropicKey(cfg);
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set (add it to .env or set ANTHROPIC_API_KEY in the environment)');
 
@@ -296,12 +308,13 @@ async function callAnthropicAudit(cfg: AppConfig, row: WpRow): Promise<SeoAuditR
     cfg.SEO_AUDIT_MAX_CONTENT_CHARS ??
       (parseInt(process.env.SEO_AUDIT_MAX_CONTENT_CHARS || '80000', 10) || 80000),
   );
-  const body = buildBodyText(row, maxContent);
+  const body =
+    input.bodyText.length <= maxContent ? input.bodyText : `${input.bodyText.slice(0, maxContent)}\n\n[…content truncated for audit…]`;
 
   const checkList = SEO_AUDIT_CHECK_IDS_22.map((id, i) => `  ${i + 1}. ${id}`).join('\n');
 
   const system = `You are an expert SEO and GEO (Generative Engine Optimization) auditor for German-language financial / YMYL blog content.
-Score conservatively. Target threshold for "good" content is 70/100.
+Score conservatively. Target threshold for "accepted rewrite quality" is 85/100.
 You MUST respond with a single valid JSON object only, no markdown.
 JSON schema:
 {
@@ -315,11 +328,33 @@ JSON schema:
 Use these exact check_id keys (22 total):
 ${checkList}
 Every key must be present. Use PASS or FAIL for each.`;
+  const markdownModeRules =
+    mode === 'rewritten_markdown'
+      ? `
+
+You are auditing a **rewritten Markdown artifact**, not final WordPress/Elementor HTML.
+
+Score separation rules:
+- seo_score and geo_score must measure **Markdown-actionable quality only**: front matter metadata, title/meta description/slug/canonical fields, heading ladder, answer-first intro, keyword naturalness, internal links, external/source citations, readability, E-E-A-T/trust copy, snippet/FAQ usefulness, topical coverage, duplicate/thin-content risk, CTA clarity, and GEO/entity clarity.
+- Do **not** lower seo_score or geo_score for checks that require the later CMS/theme/HTML transform: schema_structured_data, images_alt_text, mobile_ux, core_web_vitals_signals, and final rendered theme structure. Still include those checks in checks with status "PASS" and a note beginning "deferred:" when the Markdown provides reasonable content for the later transform or the issue is not Markdown-actionable.
+- For schema_structured_data, pass in Markdown mode when the article has clear FAQ/comparison/definition sections that can later be transformed into schema.
+- For images_alt_text, pass in Markdown mode unless the article depends on unexplained images; note "deferred: image selection/alt text belongs to final HTML/CMS step".
+- For canonical/url/meta fields, use YAML front matter as the source of truth.
+- The summary must clearly say this is a Markdown-actionable audit, not the final HTML SEO audit.`
+      : '';
+  const systemWithMarkdownMetadata = `${system}${markdownModeRules}
+
+If the content is Markdown and starts with YAML front matter, treat these fields as the Markdown equivalent of page meta tags:
+- title or seo_title -> title_tag
+- meta_description or description -> meta_description
+- canonical_url -> canonical
+- slug -> url_slugs
+Do not require literal HTML <meta> tags when equivalent front matter is present.`;
 
   const user = `Article
 ---
-slug: ${row.slug}
-title: ${row.title || row.slug}
+slug: ${input.slug}
+title: ${input.title || input.slug}
 ---
 Plain / derived text (may be truncated):
 ${body}
@@ -335,7 +370,7 @@ ${body}
     body: JSON.stringify({
       model,
       max_tokens: 6000,
-      system,
+      system: systemWithMarkdownMetadata,
       messages: [{ role: 'user', content: user }],
     }),
   });
@@ -352,8 +387,8 @@ ${body}
   const parsed = JSON.parse(jsonStr) as unknown;
   const v = LlmAuditSchema.parse(parsed);
   return {
-    slug: row.slug,
-    title: row.title || row.slug,
+    slug: input.slug,
+    title: input.title || input.slug,
     seo_score: Math.round(v.seo_score),
     geo_score: Math.round(v.geo_score),
     audited_at: new Date().toISOString(),
@@ -361,6 +396,22 @@ ${body}
     model,
     summary: v.summary,
   };
+}
+
+async function callAnthropicAudit(cfg: AppConfig, row: WpRow): Promise<SeoAuditRecord> {
+  return callAnthropicAuditForBody(cfg, {
+    slug: row.slug,
+    title: row.title || row.slug,
+    bodyText: buildBodyText(row, Number.MAX_SAFE_INTEGER),
+  });
+}
+
+export async function auditSeoContent(cfg: AppConfig, input: SeoAuditContentInput): Promise<SeoAuditRecord> {
+  return callAnthropicAuditForBody(cfg, input);
+}
+
+export async function auditSeoMarkdownContent(cfg: AppConfig, input: SeoAuditContentInput): Promise<SeoAuditRecord> {
+  return callAnthropicAuditForBody(cfg, input, 'rewritten_markdown');
 }
 
 function sleep(ms: number): Promise<void> {

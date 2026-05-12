@@ -13,6 +13,7 @@ export type ResearchAgentInput = {
   contentSnippet: string;
   auditSummary: string;
   failNotes: string;
+  checksJson: string;
 };
 
 /** Exported for docs/tests — this is the research “agent” system prompt. */
@@ -35,6 +36,9 @@ Audit summary: ${input.auditSummary}
 
 Failing SEO checks (notes):
 ${input.failNotes || '(none listed)'}
+
+Full SEO/GEO checks_json from the earlier audit:
+${input.checksJson || '{}'}
 
 Excerpt: ${input.excerpt.slice(0, 500)}
 

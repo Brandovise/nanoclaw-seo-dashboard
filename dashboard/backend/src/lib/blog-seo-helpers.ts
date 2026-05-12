@@ -6,6 +6,7 @@ import { fileMtimeSafe, readJsonSafe } from './fs-utils.js';
 import { getLatestSeoAuditAt, readSeoAuditRecords } from './seo-audit.js';
 import { sqlWpTypesDashboardClause } from './wp-dashboard-types.js';
 import { readStagingIndex } from './content-rewrite-files.js';
+import type { SeoAuditRecord } from './seo-audit.js';
 
 export function blogPaths(cfg: AppConfig) {
   const base = cfg.resolvedBlogDataDir;
@@ -51,9 +52,147 @@ export function buildAuditFallbackFromWordPress(cfg: AppConfig): Array<Record<st
   }
 }
 
+type RewriteAuditImpact = {
+  rewritten_at: string | null;
+  output_format: 'markdown' | 'html';
+  updated_kind: 'markdown' | 'html';
+  prev: {
+    seo_score: number;
+    geo_score: number;
+    checks: SeoAuditRecord['checks'];
+  };
+  updated: {
+    seo_score: number;
+    geo_score: number;
+    checks: SeoAuditRecord['checks'];
+    summary?: string;
+  };
+  markdown: RewriteAuditSnapshot | null;
+  html: RewriteAuditSnapshot | null;
+  delta: {
+    seo_score: number;
+    geo_score: number;
+  };
+  deltas: {
+    markdown: { seo_score: number; geo_score: number } | null;
+    html: { seo_score: number; geo_score: number } | null;
+  };
+};
+
+type RewriteAuditSnapshot = {
+  audit_mode: 'markdown' | 'html';
+  label: string;
+  audited_at: string | null;
+  seo_score: number;
+  geo_score: number;
+  checks: SeoAuditRecord['checks'];
+  summary?: string;
+};
+
+type RewriteAuditPair = {
+  at: string;
+  outputFormat: 'markdown' | 'html';
+  markdown: SeoAuditRecord | null;
+  html: SeoAuditRecord | null;
+};
+
+function latestRewriteAuditBySlug(cfg: AppConfig): Map<string, RewriteAuditPair> {
+  const out = new Map<string, RewriteAuditPair>();
+  for (const item of readStagingIndex(cfg)) {
+    if (item.status !== 'rewritten' && item.status !== 'done') continue;
+    const traceJson = item.orchestrator_trace_json?.trim();
+    if (!traceJson) continue;
+    try {
+      const trace = JSON.parse(traceJson) as {
+        final_html_audit?: SeoAuditRecord;
+        rounds?: Array<{ rewrite_audit?: SeoAuditRecord }>;
+      };
+      const rounds = Array.isArray(trace.rounds) ? trace.rounds : [];
+      const markdownAudit = [...rounds].reverse().find((r) => r.rewrite_audit)?.rewrite_audit ?? null;
+      const htmlAudit = trace.final_html_audit ?? null;
+      if (!markdownAudit && !htmlAudit) continue;
+      const at = item.rewritten_at || item.finished_at || htmlAudit?.audited_at || markdownAudit?.audited_at || '';
+      const existing = out.get(item.slug);
+      if (existing && existing.at > at) continue;
+      const p = (item.output_rel_path || item.html_rel_path || '').toLowerCase();
+      const outputFormat = item.output_format === 'html' || p.endsWith('.html') ? 'html' : 'markdown';
+      out.set(item.slug, {
+        at,
+        outputFormat,
+        markdown: markdownAudit,
+        html: htmlAudit,
+      });
+    } catch {
+      /* ignore malformed trace */
+    }
+  }
+  return out;
+}
+
+function snapshot(
+  mode: 'markdown' | 'html',
+  audit: SeoAuditRecord | null,
+): RewriteAuditSnapshot | null {
+  if (!audit) return null;
+  return {
+    audit_mode: mode,
+    label: mode === 'markdown' ? 'Markdown SEO/GEO' : 'Final HTML SEO/GEO',
+    audited_at: audit.audited_at || null,
+    seo_score: audit.seo_score,
+    geo_score: audit.geo_score,
+    checks: audit.checks,
+    summary: audit.summary,
+  };
+}
+
+function buildRewriteImpact(
+  original: SeoAuditRecord,
+  rewrite: RewriteAuditPair | undefined,
+): RewriteAuditImpact | null {
+  if (!rewrite) return null;
+  const markdown = snapshot('markdown', rewrite.markdown);
+  const html = snapshot('html', rewrite.html);
+  const active = html ?? markdown;
+  if (!active) return null;
+  const markdownDelta = markdown
+    ? { seo_score: markdown.seo_score - original.seo_score, geo_score: markdown.geo_score - original.geo_score }
+    : null;
+  const htmlDelta = html
+    ? { seo_score: html.seo_score - original.seo_score, geo_score: html.geo_score - original.geo_score }
+    : null;
+  const activeDelta = active.audit_mode === 'html' ? htmlDelta! : markdownDelta!;
+  return {
+    rewritten_at: rewrite.at || null,
+    output_format: rewrite.outputFormat,
+    updated_kind: active.audit_mode,
+    prev: {
+      seo_score: original.seo_score,
+      geo_score: original.geo_score,
+      checks: original.checks,
+    },
+    updated: {
+      seo_score: active.seo_score,
+      geo_score: active.geo_score,
+      checks: active.checks,
+      summary: active.summary,
+    },
+    markdown,
+    html,
+    delta: {
+      seo_score: activeDelta.seo_score,
+      geo_score: activeDelta.geo_score,
+    },
+    deltas: {
+      markdown: markdownDelta,
+      html: htmlDelta,
+    },
+  };
+}
+
 export function resolveAuditList(cfg: AppConfig): Array<Record<string, unknown>> {
   const fromDb = readSeoAuditRecords(cfg);
   if (fromDb.length > 0) {
+    const rewriteAudits = latestRewriteAuditBySlug(cfg);
     return fromDb.map(
       (r) =>
         ({
@@ -65,6 +204,7 @@ export function resolveAuditList(cfg: AppConfig): Array<Record<string, unknown>>
           summary: r.summary,
           model: r.model,
           checks: r.checks,
+          rewrite_impact: buildRewriteImpact(r, rewriteAudits.get(r.slug)),
         }) as Record<string, unknown>,
     );
   }
