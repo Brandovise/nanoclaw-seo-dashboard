@@ -83,7 +83,7 @@ pnpm run build
 Add to `.env`:
 
 ```bash
-SLACK_BOT_TOKEN=xoxb-your-bot-token
+SLACK_BOT_TOKEN=REDACTED-ROTATE-THIS-CREDENTIAL
 SLACK_SIGNING_SECRET=your-signing-secret
 ```
 
