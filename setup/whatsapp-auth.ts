@@ -27,7 +27,6 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { createRequire } from 'module';
 // Named import (not default) — pino's d.ts under NodeNext resolves the
 // default export to `typeof pino` (namespace), which isn't callable. The
 // named `pino` export resolves to the callable function.
