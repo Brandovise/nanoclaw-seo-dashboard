@@ -38,3 +38,5 @@ groups/*
 
 agents-sdk-docs
 config.bat
+.env
+.env.bak.*
