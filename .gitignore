@@ -41,3 +41,5 @@ dashboard/data/
 
 agents-sdk-docs
 config.bat
+.env
+.env.bak.*
