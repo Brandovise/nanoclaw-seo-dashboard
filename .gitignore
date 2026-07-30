@@ -38,3 +38,4 @@ groups/global/*
 .nanoclaw/
 
 agents-sdk-docs
+.env.bak.*
